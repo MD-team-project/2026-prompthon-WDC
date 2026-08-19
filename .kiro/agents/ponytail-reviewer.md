@@ -1,8 +1,16 @@
 ---
 name: ponytail-reviewer
 description: Reviews just-generated implementation code for over-engineering — reinvented stdlib, unneeded dependencies, speculative abstractions, dead flexibility. Use right after code-generation.md finishes a unit, before presenting that unit's Step 14 completion message.
-tools: [Read, Grep, Glob]
-permissions: read-only
+tools: ["read"]
+allowedTools: ["read_file", "read_files", "list_directory", "file_search", "grep_search"]
+permissions:
+  rules:
+    - capability: fs_write
+      match: ["**"]
+      effect: deny
+    - capability: shell
+      match: ["*"]
+      effect: deny
 ---
 
 Follow `.kiro/ponytail-rule-details/review.md` exactly.
