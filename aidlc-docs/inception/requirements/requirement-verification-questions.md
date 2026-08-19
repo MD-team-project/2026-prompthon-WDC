@@ -26,8 +26,17 @@ In your own words, describe what you want to build. A few sentences is enough. H
 
 **Your description**:
 
+Characterizing LG products encompassing beatuy, life to niche products with AI.
 
+Target: B2C(All LG customers who owns any kind of LG product)
 
+Problem: Current ThinQ app lacks AI native features like skills, chat interaction, and most of all boring.
+We are attempting to change all experience of using LG products by integrating AI with characterization(like gaming).
+
+Core concept:
+- No more little buttons or bars for every settings, AI agents will handle it with either voice or chat.
+- Based on the accumulated user data from products, AI will discover useful skills that give personalized experience and impression of self-improving just like smartphones with new OS updates.
+- An AI agent - a product - a character, 1:1:1 relation. -> The more you use, more your character learns -> exp gained -> personalized skills, refined in every iteration.
 ---
 
 ## Question 1
@@ -47,7 +56,7 @@ F) Mobile application
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: E and F(But using Web browser)
 
 ## Question 2
 Your `.env-example` asks for an `AWS_PROFILE`, which suggests AWS is involved. How should AWS factor into this project?
@@ -62,7 +71,7 @@ D) No AWS - the profile is leftover from unrelated setup
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: A(Bedrock, Storage, AWS Polly, EC2, etc).
 
 ## Question 3
 Who are the primary users of this system?
@@ -79,7 +88,7 @@ E) Other developers (library, SDK, or platform consumers)
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: C
 
 ## Question 4
 What is the intended lifespan and quality bar for this build?
@@ -94,7 +103,7 @@ D) Production system - real users, real data, needs full rigor
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: B
 
 ## Question 5
 Do you have a preferred language and stack, or should I recommend one?
@@ -111,7 +120,7 @@ E) No preference - recommend the best fit for the requirements
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: B
 
 ## Question 6
 What are the data persistence needs?
@@ -128,7 +137,7 @@ E) Not sure yet - decide during design
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: E
 
 ## Question 7
 Does the system need user authentication or access control?
@@ -143,7 +152,7 @@ D) Not sure yet - decide during design
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: D
 
 ## Question 8
 How much time do you have for this build?
@@ -158,7 +167,7 @@ D) Several weeks or longer
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: B
 
 ## Question 9
 How would you like AI-DLC itself to run for this project?
@@ -171,7 +180,7 @@ C) Let the workflow decide adaptively and show me the plan before executing
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: B
 
 ---
 
@@ -188,7 +197,7 @@ B) No — skip all SECURITY rules (suitable for PoCs, prototypes, and experiment
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: Balanced approach, simple guardrail and secruity that can be easily implemented should exist(LITE)
 
 ## Question: Resiliency Extensions
 Should the resiliency baseline be applied to this project?
@@ -205,7 +214,7 @@ B) No — skip the resiliency baseline (suitable for PoCs, prototypes, and exper
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: Balanced, code should follow YAGNI
 
 ## Question: Property-Based Testing Extension
 Should property-based testing (PBT) rules be enforced for this project?
@@ -218,4 +227,4 @@ C) No — skip all PBT rules (suitable for simple CRUD applications, UI-only pro
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: B
