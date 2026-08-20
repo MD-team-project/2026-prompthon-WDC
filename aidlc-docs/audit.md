@@ -1368,3 +1368,16 @@ Verification: `tsc --noEmit` clean, 5/5 template assertions pass, no infrastruct
 **Context**: CONSTRUCTION - INFRA response to PR #6. Resolution is shared credentials. Other-session diffs reverted; mcp.json flagged.
 
 ---
+## Construction - PR #6 Reply Posted, Duplicate Comment Removed
+**Timestamp**: 2026-08-20T14:00:00Z
+**User Input**: "N/A - executing the approved push/PR-comment request"
+**AI Response**: "Committed as `211e4a9` on `construction/infra` and pushed. Three files staged by name - `.env-example`, `aidlc-docs/audit.md`, `aidlc-docs/construction/infra/code/cross-account-access.md`. `.kiro/settings/mcp.json` deliberately not staged.
+
+Pre-commit checks: scanned the staged files for AWS access-key, session-token and Friendli key patterns with no matches; re-confirmed `.env` is gitignored via `git check-ignore` without opening it; `tsc --noEmit` clean and 5/5 template assertions passing.
+
+Posted the resolution as a comment on PR #6. **Posted it twice by accident and removed the duplicate.** The first `gh pr comment` invocation was piped through `tail -3`, which discarded the returned URL and surfaced the pipeline's exit code as 1, so it read as a failure when it had in fact succeeded. Retrying created a second identical comment. Detected it by re-reading the comment list rather than trusting the exit codes, then deleted `5356565282` via the issues-comments API and verified three comments remain: INFRA 12:37, BE 13:17, and this reply at 13:29. Recording the cause because the lesson generalises - piping a command whose exit code matters hides that exit code, and for a non-idempotent action like posting a comment that turns a false failure into a duplicate.
+
+Comment content: option 2 confirmed with credentials to be shared by DM and the mandatory `prompthon` profile name; the SCP explicit-deny evidence for why option 1's resource-policy form is unavailable; why the assumable-role form widens into option 2 anyway; confirmation that BE was not misconfigured, with the account-scoped-table-name explanation; the four verification checks with observed values; the two costs of sharing and why per-person IAM users are not an alternative; option 3 retained as the last mile with the reason local access cannot cover it; and the `.env-example` defect disclosed as INFRA's own."
+**Context**: CONSTRUCTION - INFRA delivered. `211e4a9` pushed, PR #6 reply posted, duplicate removed.
+
+---
