@@ -254,4 +254,30 @@ weather (which it has no way to know) and asked a clarifying question
 instead of guessing. No `deviceState` came back this time because no device
 tool was actually called; that's expected, not a bug. A skill whose
 condition it *can* resolve on its own (e.g. a plain recurring pattern with
-no context dependency) would call the device tool and return normally.
+no context dependency) calls the device tool and now also returns
+`deviceState`, same FR-5.5 rule as `/chat` - real capture, a different skill
+with no condition to ask about:
+
+```
+POST /api/characters/massagechair/skills/6843bd2e-9a81-422f-a238-a0478693cf5a/invoke
+-> 200 {"prose":"All set! Here's your session:\n\n- **Power:** On\n- **Roller zone:** Lower back\n- **Intensity:** Level 4\n- **Duration:** 20 minutes\n\nYour usual evening routine is ready to go — firm lower back relief for 20 minutes. Settle in and enjoy! Let me know if you'd like to adjust anything, like adding heat or tweaking the recline angle. 🪑✨","invokedSkillId":"6843bd2e-9a81-422f-a238-a0478693cf5a","deviceState":{"productId":"massagechair","power":"on","attributes":{"zone":"lowerBack","level":4,"minutes":20},"updatedAt":"2026-08-20T14:20:55.606Z"}}
+```
+
+`deviceState` is omitted (not `null`) when no device tool ran this turn -
+same convention as `/chat`'s `done` event.
+
+## 4. Dev-only: force a discovery run on demand - `POST /internal/discovery/:productId/run`
+
+Not part of the `/api/characters/*` surface FE calls - for whoever is driving
+a demo/rehearsal to trigger discovery on cue instead of depending on live
+usage happening to cross the 3-event threshold at the right moment. Publishes
+the exact same `discoveryProgress`/`discoveryReasoning`/`skillDiscovered`
+events on the persistent `/events` channel as a threshold-triggered run -
+real capture, with **zero** live events sent first:
+
+```
+POST /internal/discovery/shoecase/run
+-> 200 {"found":true,"title":"Daily Shoe Case Sterilization Routine"}
+-> 409 {"failure":{"code":"INVALID_REQUEST","message":"a discovery run is already in progress for this product"}}   (already running for this product - not an error, just busy)
+-> 404 {"failure":{"code":"NOT_FOUND","message":"unknown product waffle"}}
+```

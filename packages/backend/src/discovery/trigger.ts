@@ -26,3 +26,20 @@ export function maybeRunDiscovery(productId: ProductId): void {
       inFlight.delete(productId);
     });
 }
+
+/**
+ * Dev-only escape hatch for demos: run discovery right now regardless of
+ * the threshold, so it doesn't depend on live usage happening to cross 3
+ * events at the right moment. Shares the same inFlight guard and counter
+ * reset as the threshold-triggered path - `null` means a run for this
+ * product is already in progress, not a failure.
+ */
+export function forceRunDiscovery(productId: ProductId): Promise<{ found: boolean; title?: string }> | null {
+  if (inFlight.has(productId)) return null;
+  inFlight.add(productId);
+
+  return runDiscoveryGraph(productId).finally(() => {
+    resetSinceLastRun(productId);
+    inFlight.delete(productId);
+  });
+}

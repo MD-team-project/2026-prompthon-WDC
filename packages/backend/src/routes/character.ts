@@ -126,7 +126,18 @@ export function characterRouter(productId: ProductId, agent: Agent): Router {
       const instruction = `Follow this skill you previously discovered, and carry it out now:\n\n${skill.content}`;
       const result = await agent.invoke({ messages: [new HumanMessage(instruction)] });
       const last = result.messages[result.messages.length - 1];
-      res.json({ prose: String(last?.content ?? ""), invokedSkillId: skill.id });
+
+      // Same FR-5.5 rule as /chat: forward the last tool-reported device
+      // state verbatim, never compose it from the model's prose. invoke()
+      // isn't streamed, so this scans the messages agent.invoke() already
+      // returned rather than tapping on_tool_end events.
+      let deviceState: DeviceState | undefined;
+      for (const message of result.messages) {
+        const state = parseDeviceState(message);
+        if (state) deviceState = state;
+      }
+
+      res.json({ prose: String(last?.content ?? ""), invokedSkillId: skill.id, deviceState });
     } catch (err) {
       res.json({
         prose: "I couldn't run that skill just now.",

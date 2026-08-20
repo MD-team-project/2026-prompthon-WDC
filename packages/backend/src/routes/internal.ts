@@ -1,7 +1,7 @@
 import { Router } from "express";
-import type { UsageEvent } from "@prompthon/shared";
+import { isProductId, type UsageEvent } from "@prompthon/shared";
 import { appendEvents, seedEvents } from "../data/usage.js";
-import { maybeRunDiscovery } from "../discovery/trigger.js";
+import { forceRunDiscovery, maybeRunDiscovery } from "../discovery/trigger.js";
 
 export const internalRouter = Router();
 
@@ -38,4 +38,29 @@ internalRouter.post("/internal/usage/seed", (req, res) => {
 
   const accepted = seedEvents(events);
   res.json({ accepted });
+});
+
+/**
+ * Dev-only: force a discovery run right now, bypassing the usage threshold.
+ * For demos, so this doesn't depend on live usage happening to cross the
+ * threshold at the right moment on stage.
+ */
+internalRouter.post("/internal/discovery/:productId/run", async (req, res) => {
+  const { productId } = req.params;
+  if (!productId || !isProductId(productId)) {
+    res.status(404).json({ failure: { code: "NOT_FOUND", message: `unknown product ${productId}` } });
+    return;
+  }
+
+  const run = forceRunDiscovery(productId);
+  if (!run) {
+    res.status(409).json({ failure: { code: "INVALID_REQUEST", message: "a discovery run is already in progress for this product" } });
+    return;
+  }
+
+  try {
+    res.json(await run);
+  } catch (err) {
+    res.status(500).json({ failure: { code: "INTERNAL", message: (err as Error).message } });
+  }
 });
