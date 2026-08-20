@@ -103,29 +103,6 @@ export function applyExpBump(
 }
 
 /**
- * The id `step` places away from `currentId`, wrapping at both ends.
- *
- * Drives the stage swipe. Pure so the wrap-around is a unit test rather than a
- * thing discovered by swiping past the last character on stage.
- *
- * Returns null when there is nowhere to go - an unknown id, or a list too short
- * to have a neighbour - so the caller has one case to ignore rather than a
- * same-id "move" to detect.
- */
-export function neighbourId(ids: string[], currentId: string, step: number): string | null {
-  if (ids.length < 2 || !Number.isInteger(step) || step === 0) {
-    return null;
-  }
-  const index = ids.indexOf(currentId);
-  if (index === -1) {
-    return null;
-  }
-  const size = ids.length;
-  const next = (((index + step) % size) + size) % size;
-  return next === index ? null : ids[next];
-}
-
-/**
  * Turn an unknown device attribute key into something readable.
  *
  * FR-1.5 makes device state per-product, and BE owns the key vocabulary, so FE
