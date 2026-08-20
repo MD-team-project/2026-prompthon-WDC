@@ -222,12 +222,16 @@ The roster is still the entry point (FR-7.2, FR-7.3), but switching used to requ
 | Prop | Type |
 |---|---|
 | `skill` | `Skill \| null` - the most recent |
-| `busy` | `boolean` - the character is mid-reaction |
+| `busy` | `boolean` - the character is mid-reaction *and worth waiting for* |
 | `onOpen` | `() => void` |
 
 US-3.2's beat is that the character finds something on its own, and the only trace of it on the main screen used to be a line of speech that the next line pushed away.
 
-**`busy` is why the card is not just conditional rendering.** It refuses to latch a new skill while the character is still playing its discovery or level-up reaction, so the order on stage is always: the character reacts, *then* the card naming what it found appears. Latching immediately puts the explanation on screen while the character is still visibly surprised, which reads as two unrelated things happening rather than one.
+**`busy` is why the card is not just conditional rendering.** It refuses to latch a new skill while the character is mid-reaction, so the order on stage is: the character reacts, *then* the card naming what it found appears. Latching immediately puts the explanation on screen while the character is still visibly surprised, which reads as two unrelated things rather than one.
+
+**`CharacterView` passes `discovery && !levelUp`, not `discovery || levelUp`.** The distinction is the interesting part of this component. A bare surprise reaction is small, and a toast appearing over it covers the thing the reaction exists to show - worth waiting for. A level-up is loud enough to share the frame, and making the toast wait for it turns "you levelled up **and** found something" into two staggered beats instead of one. So the wait is scoped to the case that needs it, and the component itself stays dumb: it takes one boolean and does not know which reaction is playing.
+
+Note the prop is therefore not quite "is the character animating" - it is "is there a reaction worth deferring to". Naming it `busy` keeps the component ignorant of that policy, which belongs in `CharacterView` where both booleans are already in hand.
 
 Once shown it stays until tapped - no auto-dismiss, because a judge looking away for three seconds should not lose the evidence. Tapping opens the compendium. It is keyed on the skill id, so a *different* skill remounts the card and a revision of the same one deliberately does not.
 
@@ -364,6 +368,10 @@ Both are declared as literal values inside each `[data-product]` block rather th
 **Typography**: Pretendard for Korean body text, Instrument Sans for Latin labels and numerals. A `.tnum` utility applies tabular figures to level, exp, device values and dates - they sit next to each other and change while the screen is being watched, and proportional digits make them jitter. Both faces are CDN-hosted and the layout does not depend on either; a demo without network falls back to the system stack.
 
 **Motion** is CSS keyframes only, all disabled under `prefers-reduced-motion: reduce`. One rule worth stating because it has already caused a bug: a keyframe that sets `transform` replaces the whole property, offset included - so a centred element animated by scale must repeat its `translate` in every step, and two `transform` animations must not share an element.
+
+**Sprite transparency is a data problem, and was fixed in the data.** The frames were originally exported near-white (254,254,254) rather than transparent, so the frame's own canvas occluded the aura tint and floor shadow behind it and left a visible rectangle. That was first patched in CSS with two intersecting linear-gradient edge fades - and the patch could not be made safe, because several `levelup` frames put real content flush against the frame boundary with no margin, so any fade wide enough to hide the seam clipped the chair. The frames now carry real alpha instead, flood-filled inward from the four borders so only background actually connected to an edge became transparent and the fill stopped at the character's outline. The mask is gone and `.stage-sprite` is a plain `object-fit: contain`.
+
+Worth generalising: the CSS was being asked to guess where the character ended, from position alone. The asset already knew. Cost is a larger payload - alpha took the sequences from 2.1 MB to 3.8 MB - which buys a correct silhouette on every frame instead of an approximation that fails on some.
 
 ### Verification note
 

@@ -27,17 +27,19 @@ Re-run for the revision, not carried over.
 |---|---|
 | `tsc --noEmit` | Clean, strict mode with `noUnusedLocals` and `noUnusedParameters` |
 | `vitest run` | **26 passed** in 2 files - 8 property-based, 18 example-based |
-| `vite build` | Succeeds. 29 modules. **175.28 kB JS / 56.19 kB gzipped**, **22.10 kB CSS / 5.27 kB gzipped**, 1.57 kB HTML |
+| `vite build` | Succeeds. 29 modules. **175.28 kB JS / 56.19 kB gzipped**, **21.80 kB CSS / 5.20 kB gzipped**, 1.57 kB HTML |
 | `npm audit` | **0 vulnerabilities** |
 | Dev server | Starts, serves, every module transforms, the `shared` workspace resolves |
 
-CSS roughly doubled over the first pass (805 to 1910 lines) and the gzipped
-stylesheet grew by 2.6 kB. That is the cost of the layout rework and the sprite
+CSS roughly doubled over the first pass (805 to 1903 lines) and the gzipped
+stylesheet grew by 2.5 kB. That is the cost of the layout rework and the sprite
 stage, and it is paid in a file that gzips well.
 
-Not counted in the bundle: **2.3 MB of character frames** under `public/`, served
+Not counted in the bundle: **3.8 MB of character frames** under `public/`, served
 as static files rather than bundled. That is the real weight added, and it is
-worth stating plainly rather than hiding behind a JS figure that barely moved.
+worth stating plainly rather than hiding behind a JS figure that has not moved at
+all. 2.1 MB of it became 3.8 MB when the frames were re-exported with a real alpha
+channel - see the sprite transparency note below.
 
 Tests are executed here as verification. Build and Test is where they become part
 of the joint pipeline.
@@ -71,16 +73,16 @@ merge conflict is a few lines. BE and INFRA should change what is wrong.
 | `src/mock.ts` | 391 | Canned backend with a scripted SSE stream |
 | `src/pure.ts` | 118 | Seven pure functions and the input caps |
 | `src/strings.ts` | 186 | `ko`/`en` dictionaries, attribute labels |
-| `src/components/CharacterView.tsx` | 262 | The character screen. HUD with the progression pill, stage, swipe, sheets |
+| `src/components/CharacterView.tsx` | 268 | The character screen. HUD with the progression pill, stage, swipe, sheets |
 | `src/components/CharacterStage.tsx` | 218 | Sprite playback, level-up and discovery effects, placeholder fallback |
 | `src/components/SkillCompendium.tsx` | 181 | Sheet, cards, invoke and talk |
 | `src/components/InputBar.tsx` | 173 | Text, mic, validation, feedback context |
 | `src/components/SpeechArea.tsx` | 170 | Stage caption, plus `ConversationSheet` and `SpeechBubble` |
 | `src/components/RosterView.tsx` | 124 | Roster, tiles, badges, language toggle |
-| `src/components/SpotlightCard.tsx` | 100 | Latest-discovery toast, gated on the character's reaction |
+| `src/components/SpotlightCard.tsx` | 106 | Latest-discovery toast, gated on a bare discovery reaction |
 | `src/components/DeviceStatStrip.tsx` | 79 | Device state as one panel, generic renderer |
 | `src/components/CharacterSwitcher.tsx` | 67 | Dots for the other characters |
-| `src/styles.css` | 1910 | Mobile-first, per-product properties, keyframes, sprite stage |
+| `src/styles.css` | 1903 | Mobile-first, per-product properties, keyframes, sprite stage |
 | `tests/pure.test.ts` | 426 | Example-based, clamp check first |
 | `tests/pure.pbt.test.ts` | 109 | Property-based |
 | `tests/generators.ts` | 85 | Domain generators |
@@ -124,12 +126,39 @@ Four behavioural changes came with it:
    character speaking.
 2. **A discovery reaction exists**, driven by new `discovery` state per character
    alongside `levelUp`, with a `discovery/done` action. Recorded as FE-R-10b.
-3. **The spotlight waits for the reaction to finish.** The one place anything is
-   sequenced, and it is cheap because the effect reports its own completion rather
-   than being raced against a timer.
+3. **The spotlight waits for a bare discovery and not for a level-up.** The one
+   place anything is sequenced, and cheap because the effect reports its own
+   completion rather than being raced against a timer. The condition is
+   `discovery && !levelUp`: a small surprise reaction is worth not covering, a
+   level-up is loud enough to share the frame, and making the toast wait for it
+   splits one moment into two.
 4. **Characters switch without leaving the screen**, by dot or by swipe, with the
    wrap-around in the pure `neighbourId` so it is a unit test rather than something
    found by swiping past the last character on stage.
+
+### Sprite transparency, fixed in the asset rather than in CSS
+
+Worth recording because the first fix was wrong in an instructive way.
+
+The frames were exported near-white (254,254,254) instead of transparent, so each
+frame's own canvas occluded the aura tint and the floor shadow behind it and left a
+visible rectangle on the stage. The first fix was CSS: two intersecting
+linear-gradient edge fades on `.stage-sprite`, fading the outer ~3% on each axis
+independently. It could not be made safe. Several `levelup` frames put real content
+- the top edge of the chair - flush against the frame boundary with no margin, so
+any fade wide enough to hide the seam clipped the character on exactly those
+frames.
+
+**The CSS was being asked to infer where the character ended from position alone,
+and the asset already knew.** All 121 frames were re-exported with real alpha,
+flood-filled inward from the four borders so only background actually connected to
+an edge became transparent and the fill stopped at the character's outline. The
+mask and its `-webkit-` pair are gone; `.stage-sprite` is a plain `object-fit:
+contain`.
+
+Cost is 2.1 MB to 3.8 MB. That buys a correct silhouette on every frame instead of
+an approximation that failed on some, and it makes frame preloading more worth
+doing than it was.
 
 ## The one check that matters most
 
@@ -264,7 +293,7 @@ claim that makes a summary worth less than no summary:
 |---|---|
 | FR-2.5, cosmetic evolution by level | **Partly met.** The level layer survives on the roster tile ring and was removed from the character stage when real art arrived, because a ring around an illustration reads as decoration rather than as the character advancing. Cosmetic evolution is second in the drop order, so this is a legitimate thing to leave open - recorded in FE-R-10 rather than reworded to sound met |
 | `artRef` resolution | Carried and passed down, but nothing reads it. The massage chair's frame paths are hardcoded. Fine at one art set, wrong at two |
-| Frame preloading | None. Frames are plain `<img src>` swaps, so a cold first playthrough can stutter. 2.3 MB total, so a warm cache hides it; a preload pass is the fix if it looks bad on stage |
+| Frame preloading | None. Frames are plain `<img src>` swaps, so a cold first playthrough can stutter. **3.8 MB total now that the frames carry alpha**, which makes this more worth doing than it was at 2.1 MB. A warm cache still hides it - trigger both effects once before presenting - and a preload pass is the fix if it looks bad on stage |
 
 ## Open items for BE
 

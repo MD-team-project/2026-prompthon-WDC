@@ -616,23 +616,24 @@ svg {
 }
 
 /*
- * The exported frames are near-white (254,254,254, not a flat 255) rather than
- * transparent, so even matching `--bg` to pure white leaves a faint rectangle
- * where the frame's edge meets the page. Fading the outer few percent of the
- * sprite hides that seam.
+ * The exported frames used to be near-white (254,254,254, not a flat 255)
+ * rather than transparent, so even matching `--bg` to pure white left a
+ * faint rectangle where the frame's own canvas met the page - visible the
+ * moment anything with actual colour (the aura tint, the floor shadow) sat
+ * behind it, since that flat canvas fully occluded whatever was underneath
+ * right up to a hard-ish edge.
  *
- * This has to be TWO independent edge fades, not one radial/elliptical one.
- * An ellipse combines both axes (`sqrt(x^2+y^2)`), so a point that is safely
- * inside the margin on EACH axis on its own - the character's feet, a few
- * percent up from the bottom AND a few percent in from the side - lands
- * beyond 100% once the axes are combined, and gets clipped. That is exactly
- * what happened with the first version of this mask: the feet sit well inside
- * the margin on every side (checked across the widest frames of both
- * sequences - worst case is a ~5% margin on one axis), but not far enough
- * inside on TWO axes at once for an ellipse. `mask-composite: intersect` on
- * two independent linear fades only removes pixels within ~3% of an edge on
- * THAT edge's own axis, so a corner-ish point stays fully visible as long as
- * it clears the margin on each side separately - which the feet do.
+ * A position-based edge fade (the previous approach here) couldn't fix that
+ * without risk: some animated frames put real content - the chair's top
+ * edge in several `levelup` frames - flush against the frame's own boundary
+ * with zero margin, so fading "the outer few percent" would have clipped the
+ * character on exactly those frames.
+ *
+ * The frames now carry real alpha instead: each was flood-filled from its
+ * four borders inward, turning only the background actually connected to the
+ * edge transparent, and stopping at the character's own outline. That's why
+ * this can be a plain `object-fit: contain` with no mask - the transparency
+ * already follows the character's silhouette, edge margin or not.
  */
 .stage-sprite {
   width: 100%;
@@ -641,14 +642,6 @@ svg {
      to the rest of the stage. */
   transform: scale(0.8);
   object-fit: contain;
-  mask-image:
-    linear-gradient(to right, transparent, #000 3%, #000 97%, transparent),
-    linear-gradient(to bottom, transparent, #000 3%, #000 97%, transparent);
-  mask-composite: intersect;
-  -webkit-mask-image:
-    linear-gradient(to right, transparent, #000 3%, #000 97%, transparent),
-    linear-gradient(to bottom, transparent, #000 3%, #000 97%, transparent);
-  -webkit-mask-composite: source-in;
 }
 
 /* Placeholder art, Q8 C. Deliberately abstract rather than a dashed box: a

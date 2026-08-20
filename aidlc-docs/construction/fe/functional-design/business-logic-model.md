@@ -127,11 +127,13 @@ The only server-initiated flow. One SSE stream carries events for all three char
 1. Render the announcement as a character speech bubble, styled as an announcement.
 2. Insert the new skill into the compendium list.
 3. Play the character's discovery reaction (FE-R-10b), and the in-place level-up effect too if a level change accompanied it. Level-up wins if both fire.
-4. When the reaction finishes, the spotlight toast appears naming what was found.
+4. The spotlight toast appears naming what was found - after the reaction if this was a bare discovery, alongside it if a level-up came too.
 
 Steps 1 and 3 are not synchronised (FE-R-9). The effect runs 1.5-2.2s depending on whether the product has real frames, so the bubble usually lands while it is still playing, and the character is mid-reaction when it speaks.
 
-**Step 4 is sequenced, and it is the one place sequencing is worth its cost.** The toast waits for step 3 to finish rather than appearing with it. The character reacting and then the label explaining the reaction reads as one event; both at once reads as two unrelated things. This is cheap to sequence because the effect reports its own completion, so there is no timer to keep in step.
+**Step 4 is the one place anything is sequenced, and only for half the cases.** A bare discovery is a small reaction that the toast would cover, so the toast holds until it finishes - the character reacts, then the label explains it. A level-up is loud enough to share the frame, and holding the toast back from it splits one moment into two: the condition is `discovery && !levelUp`, not either-or.
+
+Sequencing is cheap here because the effect reports its own completion, so there is no timer to keep in step with anything.
 
 **Case B - the announcement is for a character not on screen**
 

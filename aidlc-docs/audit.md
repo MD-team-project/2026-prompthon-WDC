@@ -1137,3 +1137,26 @@ Committed everything on `aidlc/construction-fe`. Not pushed and no PR opened, si
 **Context**: CONSTRUCTION - FE. Code and docs now agree. Still awaiting approval at code-generation Step 15. FR-2.5 open as a known cosmetic regression; `artRef` resolution and frame preloading open as smaller gaps. BE/INFRA note: static asset serving is now a real deployment concern.
 
 ---
+## CONSTRUCTION - FE, Sprite Alpha and Spotlight Gating
+**Timestamp**: 2026-08-20T22:10:00Z
+**User Input**: "지금까지 변경사항도 커밋해줘"
+**AI Response**: "Working tree had all 121 frames modified plus three source files. Checked what the frame modification actually was before committing it, since 121 binary files changing at once is either trivial or significant and the diff does not say which: same dimensions (584x640), **alpha channel added**, 2.1 MB to 3.8 MB. Not a re-render, a re-export.
+
+**Two changes, and one of them contradicted documentation written in the previous commit.**
+
+**1. Sprite transparency moved from CSS into the asset.** The frames were exported near-white (254,254,254) rather than transparent, so each frame's own canvas occluded the aura tint and floor shadow behind it and left a visible rectangle on the stage. The previous fix was CSS - two intersecting linear-gradient edge fades on `.stage-sprite`, fading the outer ~3% per axis - and it could not be made safe: several `levelup` frames put the chair's top edge flush against the frame boundary with zero margin, so any fade wide enough to hide the seam clipped the character on exactly those frames. All 121 frames were re-exported with real alpha, flood-filled inward from the four borders so only background connected to an edge became transparent and the fill stopped at the character's outline. The mask and its `-webkit-` pair are gone and `.stage-sprite` is a plain `object-fit: contain`.
+
+Recorded rather than just noted, because the generalisable part is the reason the first attempt failed: **the CSS was being asked to infer where the character ended from position alone, and the asset already knew.** Cost is 1.7 MB of alpha, which buys a correct silhouette on every frame instead of an approximation that failed on some - and makes frame preloading more worth doing than it was, since that was already an open item at 2.1 MB.
+
+**2. The spotlight toast no longer waits for a level-up**, only for a bare discovery. `busy` went from `discovery || levelUp` to `discovery && !levelUp`. Rationale in the code: a small surprise reaction is the thing a toast would cover, so waiting is right; a level-up is loud enough to share the frame, and holding the toast back from it turns 'you levelled up **and** found something' into two staggered beats instead of one.
+
+**This directly contradicted four documents committed an hour earlier**, which said the toast waits for whichever reaction is playing and called it 'the one place anything is sequenced'. Corrected in `business-rules.md` FE-R-10b, `business-logic-model.md` section 6 step 4, `frontend-components.md` under `SpotlightCard`, and `code-summary.md`'s behavioural change 3. Also worth naming in the component doc: `busy` is not 'is the character animating' but 'is there a reaction worth deferring to', and keeping that distinction in `CharacterView` rather than in the card is what lets the card stay ignorant of the policy.
+
+Re-measured rather than adjusted the old figures: CSS 22.10 kB to **21.80 kB** and gzip 5.27 to **5.20 kB** - the mask removal made the stylesheet smaller, which is easy to assume went the other way. JS unchanged at 175.28 kB. `tsc --noEmit` clean, 26 tests pass, `npm audit` 0. Line counts updated too: `styles.css` 1910 to 1903, `CharacterView` 262 to 268, `SpotlightCard` 100 to 106.
+
+Nothing else in the docs needed changing - the frame counts, the 40ms rate, the placeholder fallback for `pral`/`shoecase` and the layout are all unaffected.
+
+Committed on `aidlc/construction-fe`. Not pushed, no PR."
+**Context**: CONSTRUCTION - FE. Frames now carry real alpha; sprite mask removed. Spotlight gating narrowed to bare discoveries. Still awaiting approval at code-generation Step 15. Open: FR-2.5 cosmetic regression, `artRef` resolution, frame preloading (now 3.8 MB).
+
+---

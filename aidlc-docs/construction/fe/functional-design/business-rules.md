@@ -108,7 +108,9 @@ A genuinely new skill plays a one-shot reaction on the character, independent of
 
 **Traces**: US-3.2, FR-2.5 in spirit, added 2026-08-20 with the real art.
 
-Level-up outranks it when both fire at once, because levelling up is the rarer event. Both clear themselves - by frame count where there are frames, by timer where there are not - and the spotlight toast waits for whichever is playing to finish before it appears, so the character is never explaining a discovery while still reacting to it.
+Level-up outranks it when both fire at once, because levelling up is the rarer event. Both clear themselves - by frame count where there are frames, by timer where there are not.
+
+**The spotlight toast waits for a bare discovery and deliberately does not wait for a level-up.** A discovery on its own is a small reaction the toast would cover, so the toast holds until it finishes: the character reacts, then the label explains it. A level-up is loud enough to share the frame, and "you levelled up **and** found something" reads better as one moment than as two staggered ones. So the wait is conditioned on `discovery && !levelUp`, not on either being true.
 
 ### FE-R-11: Art is referenced, never generated
 

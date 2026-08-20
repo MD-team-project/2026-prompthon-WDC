@@ -12,11 +12,17 @@
  *
  * Two things this toast does NOT do, on request:
  *
- *   - Appear the instant the skill arrives. `discovery`/`levelUp` are the same
- *     booleans `CharacterStage` uses to run its own reaction - while either is
- *     true the character is still mid-animation, and popping the toast up over
- *     the stage at that moment covers the thing that animation exists to show.
- *     `busy` below waits for both to clear first.
+ *   - Appear the instant a bare discovery arrives. `discovery` is the same
+ *     boolean `CharacterStage` uses to run its own surprise reaction - while
+ *     it's true with no level-up alongside it, the character is still
+ *     mid-animation, and popping the toast up at that moment covers the thing
+ *     that reaction exists to show. `busy`, passed in from `CharacterView`,
+ *     waits for that reaction to clear first.
+ *
+ *     A level-up is the deliberate exception: it lands WITH the toast rather
+ *     than after it, because "you levelled up AND found something" reads
+ *     better as one moment than two staggered ones - so `CharacterView` never
+ *     sets `busy` for a level-up, discovery alongside it or not.
  *   - Disappear on its own. Once shown it stays until the user taps it, which
  *     both opens the compendium and dismisses it - no timer, no reappearing.
  *

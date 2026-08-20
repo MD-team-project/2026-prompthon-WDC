@@ -169,10 +169,16 @@ export function CharacterView(props: Props) {
           used to float over the caption at the bottom, but the "LEVEL UP"
           banner moved there too (see `CharacterStage`), and the two were
           landing on top of each other.
+
+          `busy` only waits on a bare discovery (no level-up) - the surprise
+          reaction is the moment the toast would otherwise cover, per
+          `SpotlightCard`'s own note. A level-up gets no such wait: the toast
+          is meant to land WITH it, not after it, so `levelUp` overrides
+          `discovery` here instead of adding to it.
         */}
         <SpotlightCard
           skill={latestSkill}
-          busy={props.discovery || props.levelUp}
+          busy={props.discovery && !props.levelUp}
           t={t}
           onOpen={() => props.onToggleCompendium(true)}
         />
