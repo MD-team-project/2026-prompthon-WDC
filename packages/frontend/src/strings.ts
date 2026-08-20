@@ -56,7 +56,7 @@ const ko = {
   "error.load": "불러오지 못한 항목이 있어요.",
   "error.connection": "연결이 끊겼습니다. 캐릭터가 먼저 말을 걸 수 없어요.",
   "error.connection.retrying": "다시 연결하는 중",
-  "lang.toggle": "EN",
+  "lang.toggle": "한국어",
   "value.on": "켜짐",
   "value.off": "꺼짐",
 } as const;
@@ -106,7 +106,7 @@ const en: Record<StringKey, string> = {
   "error.connection":
     "Connection lost. I can't speak to you first until it's back.",
   "error.connection.retrying": "Reconnecting",
-  "lang.toggle": "한국어",
+  "lang.toggle": "EN",
   "value.on": "On",
   "value.off": "Off",
 };
