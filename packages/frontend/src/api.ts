@@ -246,7 +246,7 @@ function createHttpClient(getLang: GetLang): ApiClient {
       const response = await fetch(`/api/characters/${characterId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: withSkillContext(text, skillId) }),
+        body: JSON.stringify({ message: withSkillContext(text, skillId), lang: getLang() }),
       });
       if (!response.ok || !response.body) {
         throw new Error(`Request failed (${response.status})`);

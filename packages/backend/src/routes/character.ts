@@ -39,7 +39,7 @@ export function characterRouter(productId: ProductId, agent: Agent): Router {
    * verification notes.
    */
   router.post("/chat", async (req, res) => {
-    const { message } = (req.body ?? {}) as { message?: unknown };
+    const { message, lang } = (req.body ?? {}) as { message?: unknown; lang?: unknown };
     if (message !== undefined && typeof message !== "string") {
       res.status(400).json({ failure: { code: "INVALID_REQUEST", message: "message must be a string" } });
       return;
@@ -49,9 +49,20 @@ export function characterRouter(productId: ProductId, agent: Agent): Router {
     // that they asked something - FE's hook for "left and came back" (see
     // checkTodayForRelevantSkill's proactive-suggestion behavior).
     const isOpening = !message || !message.trim();
-    const humanText = isOpening
-      ? "[The user just opened this chat - they haven't said anything yet.]"
-      : message;
+    const body = isOpening ? "[The user just opened this chat - they haven't said anything yet.]" : message;
+
+    // FE's language toggle, not a guess from the message text - a message
+    // like "3" or a proper noun gives the model nothing to infer from, and a
+    // user who just switched the toggle expects the reply to follow it
+    // immediately, not whatever language their next message happens to be
+    // typed in.
+    const langDirective =
+      lang === "ko"
+        ? "[Reply in Korean, regardless of what language this message is written in.] "
+        : lang === "en"
+          ? "[Reply in English, regardless of what language this message is written in.] "
+          : "";
+    const humanText = langDirective + body;
 
     const emit = startSseStream(req, res);
     let prose = "";
