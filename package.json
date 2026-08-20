@@ -1,0 +1,11 @@
+{
+  "name": "prompthon",
+  "private": true,
+  "workspaces": [
+    "infra",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}
