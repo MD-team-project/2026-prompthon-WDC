@@ -34,6 +34,19 @@ export async function getSkill(id: string): Promise<SkillRecord | null> {
   return (Item as SkillRecord | undefined) ?? null;
 }
 
+function isBilingual(value: unknown): value is Bilingual {
+  return typeof value === "object" && value !== null && "ko" in value && "en" in value;
+}
+
+// Rows written before the bilingual title/kind/summary migration (PR #9) can
+// still be sitting in the shared demo table with a plain-string `title` and no
+// `kind`/`summary` at all. FE's SkillSummary always expects the new shape, so
+// a stale row like that throws on every render, not just once - filtering it
+// out here is what stops it from doing that.
+function isCurrentShape(record: SkillRecord): boolean {
+  return isBilingual(record.title) && isBilingual(record.summary) && typeof record.kind === "string";
+}
+
 export async function listSkills(productId: ProductId): Promise<SkillRecord[]> {
   const { Items } = await ddb.send(
     new ScanCommand({
@@ -42,7 +55,7 @@ export async function listSkills(productId: ProductId): Promise<SkillRecord[]> {
       ExpressionAttributeValues: { ":pid": productId },
     }),
   );
-  return (Items as SkillRecord[] | undefined) ?? [];
+  return ((Items as SkillRecord[] | undefined) ?? []).filter(isCurrentShape);
 }
 
 // ponytail: only touches `content` - `title`/`summary` stay whatever discovery
