@@ -25,6 +25,7 @@
 
 import type { ChatMessage } from '@prompthon/shared';
 import type { translator } from '../strings';
+import { MarkdownText } from './MarkdownText';
 
 interface Props {
   messages: ChatMessage[];
@@ -50,18 +51,6 @@ export function SpeechArea({ messages, pending, logOpen, t, onToggleLog }: Props
 
   return (
     <section className="speech" data-testid="speech-area">
-      {messages.length > 0 ? (
-        <button
-          type="button"
-          className="speech-log-toggle"
-          onClick={() => onToggleLog(!logOpen)}
-          data-testid="speech-log-toggle"
-        >
-          {t('character.log')}
-          <span className="tnum">{messages.length}</span>
-        </button>
-      ) : null}
-
       {awaiting ? (
         <p className="speech-echo" data-testid="speech-echo">
           <span className="visually-hidden">{t('speech.you')}: </span>
@@ -70,15 +59,30 @@ export function SpeechArea({ messages, pending, logOpen, t, onToggleLog }: Props
       ) : null}
 
       {spoken ? (
-        <p
-          className="speech-caption"
+        <div
+          className="speech-caption speech-balloon"
           data-kind={spoken.kind}
           role="status"
           aria-live="polite"
           data-testid={`speech-caption-${spoken.kind}`}
         >
-          {spoken.text}
-        </p>
+          <MarkdownText text={spoken.text} />
+
+          {/* Always at least one message here - `spoken` comes from `messages`,
+              so this branch never renders while the list is empty. */}
+          <button
+            type="button"
+            className="speech-balloon-history"
+            onClick={() => onToggleLog(!logOpen)}
+            aria-label={t('character.log')}
+            data-testid="speech-log-toggle"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 7v5l3 3M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" />
+            </svg>
+            <span className="tnum">{messages.length}</span>
+          </button>
+        </div>
       ) : (
         <p className="speech-caption speech-caption-idle" data-testid="speech-caption-idle">
           {t('speech.waiting')}
@@ -164,7 +168,7 @@ function SpeechBubble({ message }: { message: ChatMessage }) {
       data-kind={message.kind}
       data-testid={`speech-bubble-${message.kind}`}
     >
-      {message.text}
+      {message.role === 'user' ? message.text : <MarkdownText text={message.text} />}
     </div>
   );
 }
