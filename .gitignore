@@ -4,5 +4,7 @@
 skills-lock.json
 
 node_modules/
+dist
+*.tsbuildinfo
 cdk.out/
 .DS_Store

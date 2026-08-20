@@ -167,3 +167,52 @@ Template assertions were updated with the table: one table, base keys asserted
 meaning-neutral, on-demand billing, no LSI, and every DynamoDB grant scoped to the
 table ARN. The obsolete "no DynamoDB placeholder" assertion was replaced rather than
 deleted, so the property under test moved from absence to shape. 5 tests, all pass.
+
+---
+
+## Key schema corrected against BE's PR #7, 2026-08-20T12:10:00Z
+
+The table created at 11:55 used `pk`/`sk`. Reading `packages/backend/src/data/skills.ts`
+showed BE addresses items by **`id` alone**, so every `Key: { id }` call would have
+failed with `ValidationException`. The table was replaced to match, empty, no data lost.
+
+**Why the earlier `pk`/`sk` reasoning did not apply.** It was chosen to keep
+usage-event range queries on the base key. BE keeps usage events in memory
+(`data/usage.ts`, marked as a deliberate deferral), so skills are the only thing
+persisted, and skills are read by id plus a `Scan` filter. The problem `pk`/`sk`
+solved was not a problem this codebase has.
+
+**First deploy attempt failed, and the failure is worth recording:**
+
+```
+CloudFormation cannot update a stack when a custom-named resource requires
+replacing. Rename prompthon-app and update the stack again.
+```
+
+A custom-named table cannot be replaced — CloudFormation would have to create the
+replacement before deleting the original, and the names collide. The stack rolled back
+cleanly to `UPDATE_ROLLBACK_COMPLETE`. Fixed by **removing `tableName` entirely**
+rather than renaming, which also prevents the same wall on any future key change. The
+generated name reaches BE as `DDB_TABLE_NAME`, so nothing depends on it.
+
+Second deploy: 56 s, `UPDATE_COMPLETE`. Old table deleted, one table remains.
+
+## Full state verification, 2026-08-20T12:15:00Z
+
+| Check | Result |
+|---|---|
+| `cdk diff` | 0 differences — deployed state matches the reviewed code |
+| Typecheck and template assertions | `tsc` clean, 5/5 pass |
+| Stack resources | 8, all `CREATE_COMPLETE` or `UPDATE_COMPLETE` |
+| Bedrock from the instance | `converse` with Haiku 4.5 returned `OK` |
+| SSM secret from the instance | decrypts, 56 bytes |
+| DynamoDB from the instance | `describe-table` `ACTIVE`; put, get, delete round trip |
+| Friendli egress from the instance | HTTP 400 unauthenticated — reachable |
+| Inbound rules | `[]` |
+| Tables in the account | exactly 1 |
+
+**Transcribe streaming is granted but unverified.** `StartStreamTranscription` cannot
+be exercised without a real audio stream, and `list-transcription-jobs` is correctly
+denied because it was never granted. The first voice request from BE is the test. This
+is stated rather than glossed, because the policy being present is not the same as the
+path working.

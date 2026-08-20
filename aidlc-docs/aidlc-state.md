@@ -243,7 +243,7 @@ Opus also remains a good build-time tool for authoring persona prompts and fixtu
 | Security group | `sg-0715b9fa40c2c378d` — **zero inbound rules** |
 | Management | SSM Session Manager, agent `Online`. No key pair, no SSH port, IMDSv2 required |
 | Role actions | `ssm:GetParameter` (one exact parameter ARN), `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `transcribe:StartStreamTranscription` |
-| DynamoDB | `prompthon-app`, `ACTIVE`. Keys `pk`/`sk` (String), on-demand, 0 indexes. Added 2026-08-20T11:55:00Z |
+| DynamoDB | `prompthon-runtime-AppTable815C50BC-1O831W9BLPJNG`, `ACTIVE`. **Partition key `id` (String) only**, no sort key, on-demand, 0 indexes. Added 11:55Z, key schema corrected against BE's PR #7 at 12:10Z |
 | Bootstrap | `CDKToolkit` created. Account-level, dies with the account, must be re-run in any future account |
 
 **Bedrock IAM actions, corrected 2026-08-20T11:05:00Z.** An earlier version of this section claimed `bedrock:Converse` and `bedrock:ConverseStream` are not IAM action names. **That was wrong** — they exist. The rule depends on direction:
@@ -258,13 +258,15 @@ Removing them from the Allow policy was still correct, because there they grante
 ## Next Step
 **CONSTRUCTION is IN PROGRESS. INFRA Code Generation is complete and deployed, awaiting the user's review approval. BE and FE have not started.**
 
-**What BE needs from INFRA is now published.** Read `aidlc-docs/construction/infra/code/runtime-contract.md`.
+**What BE needs from INFRA is now published.** Read `aidlc-docs/construction/infra/code/runtime-contract.md`. It carries a **MANDATORY for BE** section with five blocking items found by reviewing PR #7: `DDB_TABLE_NAME` must be set (the `prompthon-local` default does not exist), `engines.node` must be `>=22` not `>=20` because `@langchain/openai@^1.5.9` requires it, root `workspaces` must include `infra` or CDK dependencies stop installing, `.env-example` is missing the boot-required `FRIENDLI_ENDPOINT_ID`, and on EC2 the Friendli key comes from SSM rather than `.env`.
 
 **DynamoDB handoff simplified 2026-08-20T11:10:00Z, then resolved 2026-08-20T11:55:00Z, both by user directive.** The seven-field access-pattern contract (caller, operation, owner boundary, consistency, fields, result bound, RPS) was **withdrawn as over-process for a demo**. Then the table was **created up front** rather than waiting on BE at all.
 
-**What made waiting unnecessary**: the only immutable part of a table is its base key, so a base key that encodes nothing cannot be wrong later. `prompthon-app` uses `pk`/`sk`, both String, carrying no domain meaning. Item-key conventions like `CHARACTER#pral` are BE's *data*, changeable at any time, not schema. So Question 5's original concern — that provisioning early means guessing immutable keys — does not apply to a meaning-neutral key.
+**Corrected 2026-08-20T12:10:00Z against BE's PR #7.** The table was first created with `pk`/`sk` on the reasoning that a meaning-neutral base key cannot be wrong later. Reading BE's `packages/backend/src/data/skills.ts` showed it addresses items by **`id` alone**, so every `Key: { id }` call would have failed with `ValidationException`. The table was replaced, empty, to match. **BE's data-access code is the contract**, and the earlier `pk`/`sk` reasoning was solving a problem this codebase does not have: usage events stay in memory by BE's own deferral, so skills are the only thing persisted, read by id plus a `Scan` filter.
 
-**Still binding**: `pk` holds a server-known owner, never a client-supplied id. Using an item's own id as `pk` would allow point lookups only and lose the usage-event range queries Skill Discovery depends on.
+**Table names must not be fixed.** `tableName: 'prompthon-app'` made the first replacement attempt fail outright — CloudFormation cannot replace a custom-named resource because it would create the replacement before deleting the original and the names collide. The name is now generated and travels as `DDB_TABLE_NAME`.
+
+**Still binding**: keys come from a server-generated value, never a client-supplied identifier. BE satisfies this with `randomUUID()`.
 
 **GSIs remain absent** and are added one per deploy when a lookup needs one — CloudFormation refuses more than a single index change per stack update. LSIs are excluded permanently since they cannot be added after table creation.
 

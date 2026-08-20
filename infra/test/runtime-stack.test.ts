@@ -21,17 +21,15 @@ test('no inbound path to the host: no ingress rule, no key pair', () => {
   }
 });
 
-// One table, and its immutable part carries no domain meaning. If a future edit
-// puts something like `deviceId` in the base key, changing it later means
-// replacing the table, so this asserts the neutrality rather than the names.
-test('single table with meaning-neutral base keys, on demand, no LSI', () => {
+// The key schema must match BE's data access code, which addresses items by `id`
+// alone. Adding a sort key here would break every Key: { id } call in
+// packages/backend/src/data/skills.ts, and fixing it afterwards means replacing
+// the table. That is why this asserts the exact schema rather than a property of it.
+test('single table keyed by id alone, on demand, no LSI', () => {
   const tables = Object.values(template.findResources('AWS::DynamoDB::Table'));
   assert.equal(tables.length, 1);
   const [props] = tables.map((t) => t.Properties);
-  assert.deepEqual(props.KeySchema, [
-    { AttributeName: 'pk', KeyType: 'HASH' },
-    { AttributeName: 'sk', KeyType: 'RANGE' },
-  ]);
+  assert.deepEqual(props.KeySchema, [{ AttributeName: 'id', KeyType: 'HASH' }]);
   assert.equal(props.BillingMode, 'PAY_PER_REQUEST');
   // LSIs cannot be added after creation, so an accidental one is unfixable.
   assert.equal(props.LocalSecondaryIndexes, undefined);

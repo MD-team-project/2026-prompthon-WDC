@@ -21,14 +21,13 @@ Regenerate with `infra/diagram.py` after changing the stack.
   and is the only side that sees accumulated usage history.
 - **Voice and text are one input surface.** Text goes straight to the backend; voice
   goes through Transcribe first, so the agent only ever receives text.
-- **One DynamoDB table, `prompthon-app`, with base keys `pk` and `sk`.** Both are
-  plain strings that carry no domain meaning, which is the point: base keys are the
-  only immutable choice in a table, so encoding nothing in them means BE can settle
-  item-key conventions in its own code and change them later. `pk` holds a
-  server-known owner such as `CHARACTER#pral`, never a client-supplied id, which
-  keeps the range queries discovery needs on the base key with no index. GSIs get
-  added when a lookup actually needs one — one per deploy, since CloudFormation
-  refuses more than a single index change per stack update.
+- **One DynamoDB table, partition key `id` alone, no sort key, no index.** The schema
+  is taken from `packages/backend/src/data/skills.ts`, which addresses items by `id`.
+  The name is CloudFormation-generated on purpose: a custom-named table cannot be
+  replaced, so a fixed name would block any future key change. It reaches BE as
+  `DDB_TABLE_NAME`. Only skills are persisted today — usage events and app context
+  are in-memory by BE's deferral — and everything else fits this same table by id
+  prefix if it moves later.
 - **K-EXAONE is outside AWS**, so outbound egress is its only path. Its key comes
   from Parameter Store, never from a file on the host.
 
@@ -40,7 +39,7 @@ Regenerate with `infra/diagram.py` after changing the stack.
 | Friendli key | `ssm:GetParameter` | One exact parameter ARN. No list, no path read, no write |
 | Bedrock | `InvokeModel`, `InvokeModelWithResponseStream` | `foundation-model/*`, `inference-profile/*` |
 | Transcribe | `StartStreamTranscription` | `*` — no resource-level permission exists |
-| DynamoDB | read and write item operations | The `prompthon-app` table ARN only |
+| DynamoDB | read and write item operations | The app table ARN only |
 
 The Bedrock region wildcard is required: `us.` inference profiles fan out to sibling
 regions and fail without foundation-model permission there. `Converse` needs no

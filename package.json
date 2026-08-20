@@ -1,11 +1,32 @@
 {
   "name": "prompthon",
   "private": true,
+  "version": "0.1.0",
+  "type": "module",
   "workspaces": [
     "infra",
     "packages/*"
   ],
   "engines": {
     "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n stub,api -c cyan,green \"npm:dev:stub\" \"npm:dev:api\"",
+    "dev:stub": "npm run dev -w @prompthon/device-stub",
+    "dev:api": "npm run dev -w @prompthon/backend",
+    "build": "npm run build -w @prompthon/shared && npm run build -w @prompthon/device-stub && npm run build -w @prompthon/backend",
+    "start": "concurrently -n stub,api -c cyan,green \"npm:start:stub\" \"npm:start:api\"",
+    "start:stub": "npm run start -w @prompthon/device-stub",
+    "start:api": "npm run start -w @prompthon/backend",
+    "check": "tsc -b packages/shared packages/device-stub packages/backend",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "concurrently": "9.1.2",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3",
+    "vitest": "3.0.5",
+    "fast-check": "3.23.2",
+    "@types/node": "22.13.1"
   }
 }

@@ -2,6 +2,8 @@
   "name": "@prompthon/infra",
   "version": "0.1.0",
   "private": true,
+  "//": "Explicit because the root package.json is type: module. CDK and tsx run this workspace as CommonJS.",
+  "type": "commonjs",
   "scripts": {
     "typecheck": "tsc",
     "test": "node --import tsx --test test/*.test.ts",

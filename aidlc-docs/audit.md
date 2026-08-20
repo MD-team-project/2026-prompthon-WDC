@@ -1300,3 +1300,18 @@ Q4 A"
 **Context**: CONSTRUCTION - INFRA follow-up. DynamoDB provisioned and verified; BE is now unblocked on persistence.
 
 ---
+## Construction - INFRA Aligned to BE PR #7, Table Key Schema Corrected
+**Timestamp**: 2026-08-20T12:20:00Z
+**User Input**: "중요: BE 담당이 PR을 올려두었습니다(PR#7) 해당 내용을 확인하여 인프라에서 수정 및 반영하거나 정의해야되는 부분을 진행하세요" / "provision을 하면 나머지눈 BE에서 직접 client 연결해서 할게" / "현재 구성대로 제대로 프로비전되어있는지 확인하고, BE가 이어받아갔을때 반드시 수정해야하는 사항을 PR 내용 혹은 문서 필요한 곳에 명시"
+**AI Response**: "Read all 45 files of BE PR #7 and found the provisioned table incompatible with BE's code. `packages/backend/src/data/skills.ts` addresses items by `id` alone with no sort key, so every `Key: { id }` call against the `pk`/`sk` table would have failed with `ValidationException`. Replaced the table with partition key `id` (String), no sort key. The earlier `pk`/`sk` choice was solving a problem this codebase does not have: BE keeps usage events in memory by its own deliberate deferral, so skills are the only thing persisted and they are read by id plus a Scan filter. BE's data-access code is the contract, and changing 4 lines of infra beat changing 5 functions plus a shared type plus 6 call sites in BE.
+
+The first replacement attempt FAILED because `tableName: 'prompthon-app'` was pinned: CloudFormation cannot replace a custom-named resource, since it would create the replacement before deleting the original and the names collide. Stack rolled back cleanly to `UPDATE_ROLLBACK_COMPLETE`. Fixed by removing `tableName` entirely rather than renaming, which also prevents the same wall on any future key change. Second deploy succeeded in 56 s.
+
+Verified the full deployed state: `cdk diff` 0 differences, `tsc` clean, 5/5 template assertions, 8 stack resources all complete, and from inside the instance under instance-role credentials - Bedrock `converse` returned OK, the SSM SecureString decrypts at 56 bytes, DynamoDB `describe-table` ACTIVE plus a put/get/delete round trip using the same call shapes as `skills.ts`, Friendli egress reachable, 0 inbound rules, exactly 1 table. Reported honestly that Transcribe streaming is granted but unverifiable without a real audio stream, and that `list-transcription-jobs` is correctly denied because it was never granted.
+
+Documented five blocking items BE must fix, in `runtime-contract.md` under a MANDATORY heading and mirrored into `aidlc-state.md`: `DDB_TABLE_NAME` must be set because the `prompthon-local` default does not exist; `engines.node` must be `>=22` not `>=20` since `@langchain/openai@^1.5.9` requires it; root `workspaces` must include `infra` or CDK dependencies stop installing; `.env-example` omits `FRIENDLI_ENDPOINT_ID` which `config.ts` wraps in `required()` so the backend throws at boot; and on EC2 the Friendli key must come from SSM rather than a copied `.env`. Added three advisory items - no `maxTokens` cap on `bedrockChat`, progression has no storage layer so level and exp reset on restart, and the four first-hour Friendli checks remain BE's to run.
+
+Also prepared merge resolutions for the four files both branches touch - `package.json`, `.env-example`, `.gitignore`, `package-lock.json` - and declared `\"type\": \"commonjs\"` in `infra/package.json` since BE's root sets `\"type\": \"module\"`. Regenerated the architecture diagram."
+**Context**: CONSTRUCTION - INFRA aligned to BE's actual data-access code. Table re-provisioned and verified; BE handoff published with blocking items.
+
+---

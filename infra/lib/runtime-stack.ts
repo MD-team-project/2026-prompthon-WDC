@@ -63,17 +63,26 @@ export class RuntimeStack extends Stack {
       }),
     );
 
-    // Keys are deliberately meaning-neutral. `pk`/`sk` are the only immutable
-    // decision here, and they encode nothing about the domain, so BE can settle
-    // item-key conventions in its own code and change them freely. `pk` holds a
-    // server-known owner rather than a client-supplied id, which keeps the
-    // usage-event range queries discovery needs on the base key - no GSI.
-    // Add GSIs later as query needs appear: one per deploy, CloudFormation
-    // refuses more than a single index change per stack update.
+    // Key schema is taken from BE's data access code (packages/backend/src/data/
+    // skills.ts), which is the contract: it addresses items by `id` alone, with no
+    // sort key. `id` is a server-generated randomUUID, never client-supplied.
+    //
+    // An earlier revision used a generic `pk`/`sk` pair to keep usage-event range
+    // queries on the base key. That turned out to be solving a problem BE does not
+    // have: usage events live in memory (data/usage.ts), and skills are the only
+    // thing persisted here. A sort key would have broken every Key: { id } call.
+    //
+    // No GSI: listSkills uses Scan with a productId filter, which is fine at demo
+    // volume. If it stops being fine, a productId GSI is one deploy - and only one,
+    // since CloudFormation refuses more than a single index change per update.
+    // No explicit tableName on purpose. A custom-named table cannot be replaced
+    // by CloudFormation - it would have to create the replacement before deleting
+    // the original, and the names collide, so the deploy fails outright. Learned
+    // the hard way when the key schema changed. The generated name is not a
+    // problem because it travels to BE as DDB_TABLE_NAME, taken from the stack
+    // output below.
     const table = new dynamodb.Table(this, 'AppTable', {
-      tableName: 'prompthon-app',
-      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.DESTROY,
     });
@@ -103,6 +112,7 @@ export class RuntimeStack extends Stack {
     new CfnOutput(this, 'InstanceId', { value: instance.instanceId });
     new CfnOutput(this, 'SecurityGroupId', { value: securityGroup.securityGroupId });
     new CfnOutput(this, 'BackendRoleArn', { value: role.roleArn });
-    new CfnOutput(this, 'AppTableName', { value: table.tableName });
+    // Named to match the env var BE's config.ts already reads.
+    new CfnOutput(this, 'DdbTableName', { value: table.tableName });
   }
 }
