@@ -106,13 +106,17 @@ export function characterRouter(productId: ProductId, agent: Agent): Router {
     res.json(summaries);
   });
 
+  // FE-facing - title/summary only, same shape as the list. `content` (the
+  // full analysis) never leaves the backend over REST; only the control
+  // agent's `getSkill` tool sees it.
   router.get("/skills/:skillId", async (req, res) => {
     const skill = await getSkill(req.params.skillId);
     if (!skill) {
       res.status(404).json({ failure: { code: "NOT_FOUND", message: "skill not found" } });
       return;
     }
-    res.json(skill);
+    const { content, ...summary } = skill;
+    res.json(summary);
   });
 
   router.post("/skills/:skillId/invoke", async (req, res) => {

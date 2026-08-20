@@ -5,15 +5,23 @@
 // DDB_TABLE_NAME (config.ddbTableName) - INFRA provisions it from this file.
 import { DeleteCommand, GetCommand, PutCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { randomUUID } from "node:crypto";
-import type { ProductId, SkillRecord } from "@prompthon/shared";
+import type { Bilingual, ProductId, SkillKind, SkillRecord } from "@prompthon/shared";
 import { config } from "../config.js";
 import { ddb } from "./ddbClient.js";
 
-export async function putSkill(input: { productId: ProductId; title: string; content: string }): Promise<SkillRecord> {
+export async function putSkill(input: {
+  productId: ProductId;
+  title: Bilingual;
+  kind: SkillKind;
+  summary: Bilingual;
+  content: string;
+}): Promise<SkillRecord> {
   const record: SkillRecord = {
     id: randomUUID(),
     productId: input.productId,
     title: input.title,
+    kind: input.kind,
+    summary: input.summary,
     content: input.content,
     createdAt: new Date().toISOString(),
   };
@@ -37,6 +45,10 @@ export async function listSkills(productId: ProductId): Promise<SkillRecord[]> {
   return (Items as SkillRecord[] | undefined) ?? [];
 }
 
+// ponytail: only touches `content` - `title`/`summary` stay whatever discovery
+// wrote, so FE's compendium can go stale after a chat-driven revision. Add a
+// title/summary regen (same TITLE_KO/EN + SUMMARY_KO/EN shape as discovery)
+// if that's ever visibly wrong in a demo.
 export async function updateSkillContent(id: string, content: string): Promise<SkillRecord | null> {
   try {
     const { Attributes } = await ddb.send(

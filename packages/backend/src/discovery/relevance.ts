@@ -6,7 +6,6 @@ import { listSkills } from "../data/skills.js";
 
 export interface RelevantSkill {
   skillId: string;
-  title: string;
   suggestion: string;
 }
 
@@ -27,7 +26,7 @@ export async function checkTodayRelevance(productId: ProductId): Promise<Relevan
   const prompt = `Today's context: ${JSON.stringify(today)}.
 
 This character has learned these skills:
-${skills.map((s) => `- id: ${s.id}\n  title: ${s.title}\n  content: ${s.content}`).join("\n\n")}
+${skills.map((s) => `- id: ${s.id}\n  title: ${s.title.en}\n  content: ${s.content}`).join("\n\n")}
 
 Does today's context clearly match the condition described in exactly ONE of these skills? Only say yes if the match is genuinely clear from the skill's own stated condition, not a guess.
 
@@ -48,5 +47,5 @@ If no skill clearly matches, respond with exactly: NO_MATCH`;
   const skill = skills.find((s) => s.id === skillId);
   if (!skill || !suggestion) return null;
 
-  return { skillId, title: skill.title, suggestion };
+  return { skillId, suggestion };
 }

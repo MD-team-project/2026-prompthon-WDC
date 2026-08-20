@@ -304,8 +304,6 @@ export function CharacterView(props: Props) {
           lang={props.lang}
           t={t}
           onClose={() => props.onToggleCompendium(false)}
-          onInvoke={props.onInvoke}
-          onStartFeedback={props.onStartFeedback}
         />
       ) : null}
     </div>

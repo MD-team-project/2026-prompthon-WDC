@@ -58,10 +58,29 @@ export interface AppContextEvent {
   screenTimeMinutes: number;
 }
 
+/** The same short text in both languages this project supports. */
+export interface Bilingual {
+  ko: string;
+  en: string;
+}
+
+/**
+ * Game-skill-style classification, decided at discovery time from which kind
+ * of pattern was found: `buff` for a context-correlated pattern (a passive
+ * trait that activates under a condition, e.g. weather), `action` for a plain
+ * recurring pattern (a fixed routine the character can run on command).
+ */
+export type SkillKind = "buff" | "action";
+
 /**
  * A discovered skill is a Markdown document describing a new feature or mode,
  * derived from usage data. Steps and triggers are described in prose inside
  * `content` rather than held as structured fields.
+ *
+ * `title`/`kind`/`summary` are the front-matter-like metadata generated
+ * alongside `content` at discovery time - the only part ever shown to FE.
+ * `content` is the full analysis, agent-facing only (the control agent's
+ * `getSkill` tool), never returned over the REST API.
  *
  * No status/retired flag: the control agent deletes the row outright via a
  * tool when the user wants a skill gone, rather than soft-deleting it.
@@ -69,12 +88,15 @@ export interface AppContextEvent {
 export interface SkillRecord {
   id: string;
   productId: ProductId;
-  title: string;
+  title: Bilingual;
+  kind: SkillKind;
+  /** ~3 short sentences, one language-appropriate line each - what FE shows. */
+  summary: Bilingual;
   content: string;
   createdAt: string;
 }
 
-/** List view. Omits `content` so polling stays cheap. */
+/** FE-facing view. Omits `content` - FE never sees the full analysis. */
 export type SkillSummary = Omit<SkillRecord, "content">;
 
 /**
