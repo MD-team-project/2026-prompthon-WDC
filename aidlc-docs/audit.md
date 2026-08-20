@@ -987,3 +987,397 @@ Committing all INCEPTION artifacts and opening a PR for merge as requested."
 
 ---
 
+## INFRA Pre-Construction Environment Survey
+**Timestamp**: 2026-08-20T08:12:00Z
+**User Input**: "현재 AI-DLC단계에서 Inception 단계가 완료되었어. 파일들을 읽어 얼마나 진행되었는지 파악하고, 최근 main으로 merge된 PR에서 논의된 사항들에 대해 현황 파악하고 현재에서 진행해야하는 사항들을 알려줘. 참고로 나는 3인중 'INFRA' 담당"
+**AI Response**: "Read all Inception artifacts and all five PRs. Confirmed INCEPTION complete and approved, CONSTRUCTION entirely unstarted - no unit branches, no open PRs, zero application code, no `packages/` or `infra/` directory. Noted PR #5 carries no comments or reviews, so all recorded discussion lives in the PR body and the documents rather than in review threads.
+Then surveyed the actual AWS account, which no document describes. Findings below are new information, not restatements."
+**Context**: INFRA stream, pre-Construction survey. Findings recorded because they are not derivable from any existing artifact.
+
+---
+
+## AWS Account Findings (measured, not assumed)
+**Timestamp**: 2026-08-20T08:12:00Z
+**Context**: Account `643922457910`, `WSParticipantRole` (Workshop Studio), profile `prompthon`, region `us-east-1`.
+
+**Permission boundary** - from `workshop-iam-1` and `ws-default-policy`:
+- **Region lock**: everything outside `us-east-1` is denied, with a NotAction exception list that includes `bedrock:Invoke*`, `s3:*`, `iam:*`. DynamoDB, Transcribe and EC2 are therefore us-east-1 only.
+- `iam:CreateRole` and `iam:CreatePolicy` allowed on `*`.
+- **`iam:PassRole` is restricted to a service whitelist**: lambda, ec2, apigateway, events, scheduler, rds, dynamodb, cloudformation, bedrock. **`ecs-tasks.amazonaws.com` is absent**, so ECS/Fargate is unavailable. The plan's choice of EC2 for conditional deployment is therefore correct by necessity, not just by preference.
+- **`iam:CreateUser` and `iam:CreateServiceSpecificCredential` are not granted.**
+
+**Bedrock model access - probed by real Converse calls, not inferred**:
+- Working: `us.anthropic.claude-sonnet-4-5`, `us.anthropic.claude-haiku-4-5`, `global.anthropic.claude-sonnet-4-5`, Nova Micro/Lite/Pro, Llama 3.3 70B, DeepSeek R1.
+- **Blocked**: Claude 3 Haiku, Claude 3.5 Haiku, Claude Sonnet 4, Nova Premier - all rejected as legacy or end-of-life.
+- Tool calling verified working (Nova Lite returned `stopReason: tool_use` with correctly parsed arguments). This partially de-risks the Bedrock side of Agentic Control, though it says nothing about the Friendli verification.
+- **Consequence for BE**: the model ID for `ChatBedrockConverse` must be Sonnet 4.5 or Haiku 4.5. Guessing an older Claude ID will fail.
+
+**Existing account state**:
+- Pre-existing CloudFormation stack **`bedrock-apikey`**, created 2026-08-19T02:29Z, which is before this project started. Creates an IAM user with `AmazonBedrockLimitedAccess` plus a Bedrock bearer token, and exposes the token in plaintext as a stack Output. Credential is Active and **self-expires 2026-08-24T02:31Z**.
+- **Decision: leave it untouched and do not use it.** Profile-based credentials already work, so the bearer token is a redundant second auth path. Deleting is irreversible because `iam:CreateUser` is not granted. The token expiring on its own before any reuse resolves the hygiene concern without action. Team note: the token is readable by anyone with `cloudformation:DescribeStacks`, so it must never be copied into a document or commit - that copy would be the actual NFR-1.1 violation, not the stack itself.
+- DynamoDB: 0 tables. S3: 0 buckets, so **CDK is not bootstrapped**. Default VPC present (`vpc-0e879b6764ca8fc90`). Transcribe reachable.
+
+---
+
+## Local Toolchain: Node 22 Required and Installed
+**Timestamp**: 2026-08-20T08:30:00Z
+**User Input**: "현재 로컬에 설치되어있지 않은 항목들은 다운로드 받으면 됩니다. (ex. pnpm, docker...) 다운로드  필요한  항목 있으면 만들어줘"
+**AI Response**: "Found one genuine blocker rather than the two suggested. `@langchain/openai@1.5.9` declares `engines: node >=22` and local Node was 20.20.2. That package is the mandated EXAONE/Friendli path (`ChatOpenAI` with an overridden `baseURL`), so this is a hard requirement rather than a preference.
+Installed `node@22` via Homebrew, then unlinked `node@20` and linked `node@22` so that all execution contexts agree. The `.zshrc` PATH edit alone was insufficient - `/opt/homebrew/bin/node` still resolved to node@20, which would silently give Node 20 to scripts and non-interactive contexts while the terminal showed 22. Verified 22.23.2 across interactive, non-interactive, bare-PATH and npm contexts. Reverting is `brew unlink node@22 && brew link node@20`; node@20 was unlinked, not removed.
+Verified the full dependency set resolves under Node 22 with no peer conflicts: langchain 1.5.10, @langchain/core 1.2.9, @langchain/langgraph 1.4.12, @langchain/openai 1.5.9, @langchain/aws 1.4.4, @aws-sdk/client-transcribe-streaming 3.1114.0, @aws-sdk/lib-dynamodb 3.1114.0, express 5.2.1, zod 4.4.3, aws-cdk-lib 2.266.0, constructs 10.8.1, aws-cdk 2.1138.0, typescript 5.9.3, tsx 4.23.12, vitest 4.1.11, fast-check 4.9.0.
+Declined to install pnpm and Docker, with reasons. pnpm: the settled decision is 'monorepo with workspaces' and npm workspaces satisfies it; installing pnpm would oblige BE and FE to install it too at hour 0 and introduces version mismatch as a new failure mode. corepack 0.34.6 is present if it is ever wanted. Docker: nothing in this phase needs it - no Lambda so no CDK asset bundling, real us-east-1 DynamoDB rather than DynamoDB Local, and EC2 as the deploy target. The PassRole whitelist blocks ECS anyway, so Docker would buy nothing on the deploy path.
+Flagged that `typescript` latest is now 7.0.2, the native-port rewrite, and recommended pinning ^5.9.3 on a 1.5-day clock."
+**Context**: INFRA stream, local toolchain. Node 22.23.2 active, npm 10.9.8.
+
+---
+
+## New Constraint: AWS Account Deleted in 3 Days
+**Timestamp**: 2026-08-20T08:45:00Z
+**User Input**: "3일 후에 aws 계정 자체가 삭제될 예정이라 iaC로 인프라를 코드로 관리해서 추후에 재사용할수 있는 방식으로 정리되어야해. 이러한 측면에서 aws cdk를 사용하는게 적절한지 아니면 terraform 사용이 적절한지?"
+**AI Response**: "Recorded a constraint no existing artifact contains: the AWS account is deleted in 3 days, which promotes IaC portability from a conditional nicety to a first-class requirement. `execution-plan.md` treats deployment as conditional on spare time; that framing no longer covers this.
+Compared CDK and Terraform for this specific situation and recommended **CDK**, while naming the one axis where Terraform genuinely wins.
+Terraform's real advantage: CDK requires `cdk bootstrap` per account and region, creating a CDKToolkit stack with an S3 bucket, ECR repository, SSM parameter and five IAM roles. That footprint dies with the account and must be re-established in any future account. Terraform has no equivalent prerequisite, and since a fresh-account apply starts from empty state, local state is sufficient and the state question is nearly moot.
+Why CDK anyway: the resource surface is two DynamoDB tables plus an IAM role plus conditional EC2, so expressiveness is a wash; the CLI and libraries are already verified resolvable; TypeScript keeps `infra/` inside the existing monorepo and its typecheck and vitest pipeline rather than adding HCL as a second language and toolchain against a ~3 hour INFRA budget.
+Stated the deciding question plainly: if the next account is personal or another Workshop Studio account, bootstrap is a non-issue and CDK wins. If there is any chance of a corporate account where IAM role creation needs approval, Terraform's lack of bootstrap becomes the deciding factor.
+Then flagged what matters more than the tool choice - the things that vanish with the account and that neither tool can capture:
+1. **Bedrock model access is not IaC-manageable.** Verified there is no entitlement or model-access API in the Bedrock CLI, and no CloudFormation or Terraform resource for it. It is a console action. The evidence this is not hypothetical is already in this account: Claude 3.x, Sonnet 4 and Nova Premier are blocked while Sonnet 4.5 and Haiku 4.5 work. A future account with different entitlements will apply the IaC perfectly and still fail to run the app, and that failure appears nowhere in the IaC logs.
+2. `FRIENDLI_API_KEY` is outside AWS entirely.
+3. The region lock and PassRole whitelist are account-attached policies, not our code, and may differ in the next account.
+Concluded that an `infra/README.md` prerequisite checklist - Bedrock model IDs to enable, required region, required IAM permissions, environment variable names - contributes more to reuse than the CDK-versus-Terraform choice does.
+Also flagged that `cdk bootstrap` and `cdk deploy` must actually be run to completion today. IaC that has never been applied is an unverified draft rather than a reusable asset, and after the account is deleted there is no environment left to verify it against."
+**Context**: INFRA stream. **Decision: AWS CDK (TypeScript), `infra/` workspace, aws-cdk-lib pinned at 2.266.0, prerequisite README required.**
+
+---
+
+## Document Inconsistencies Found
+**Timestamp**: 2026-08-20T08:50:00Z
+**Context**: INFRA stream. Three conflicts found while reading Inception artifacts, resolved in `aidlc-state.md` rather than left for the next reader to trip over.
+
+1. **Whether Bedrock is in the runtime.** `aidlc-state.md`'s "MANDATORY CONSTRAINT - EXAONE via Friendli (2026-08-20T04:52:07Z)" section asserts "Bedrock removed from the runtime. AWS surface narrows to DynamoDB and Transcribe." That was overturned by the 05:14:22Z two-model split and again by `application-design.md` section 5 at 07:14:09Z, both of which keep Bedrock for Agentic Control, but the superseded sentence was never struck. **Resolution: Bedrock is in.** The measured account state agrees - Bedrock is reachable and tool calling works.
+2. **Who owns the DynamoDB schema.** `execution-plan.md` section 5 lists it as an INFRA-to-BE contract. `application-design.md` section 8, written later at 07:22:51Z, explicitly moves storage schema to "not fixed", settled directly between the parties during Construction. **Resolution: the later policy governs.** INFRA does not hand BE a schema; INFRA and BE agree the keys, then INFRA expresses the result as IaC.
+3. **Monorepo initialisation.** `unit-of-work.md` states the monorepo is "already initialised". It is not - there is no root `package.json` and no `packages/` directory. **Resolution: initialising it is INFRA's first Construction deliverable.**
+
+---
+
+## Construction Session Handoff
+**Timestamp**: 2026-08-20T08:55:00Z
+**User Input**: "Construction 진행하려면 새로운 세션을 열어서 진행하면 되나용?"
+**AI Response**: "Confirmed the documented procedure - own branch, new session, `AI-DLC Construction, INFRA 담당` - and flagged that following it literally right now would lose this session's findings, since none of them exist in any artifact. A fresh session reads `aidlc-state.md` and would learn nothing about the account deletion deadline, the measured Bedrock model access, the Node 22 requirement or the CDK decision, and would plausibly hand BE a blocked Claude model ID in good faith.
+Created branch `construction/infra` and recorded everything above before any handoff, so that either continuing here or opening a fresh session now works equally well."
+**Context**: INFRA stream. Branch `construction/infra` created. Findings recorded. Construction not yet formally started - Functional Design has not run.
+
+---
+## Full Bedrock Model Census
+**Timestamp**: 2026-08-20T09:10:00Z
+**User Input**: "bedrock 사용 가능한 모델 리스트 전부 알려줘"
+**AI Response**: "Replaced the earlier spot-check with a full census, because `ListFoundationModels` reports availability that does not survive an actual invocation. Enumerated all 121 listed models, filtered to the 88 that are text-in/text-out, dropped provisioned-only and non-Converse variants, resolved inference-profile IDs for models that require them, then invoked all 73 remaining candidates with a minimal Converse call and separately probed all successful ones with a `toolConfig`.
+Result: **59 invoke successfully, 49 of those support tool calling, 14 are blocked.** Blocked splits into 5 legacy/end-of-life and 9 not entitled to this account - the latter includes Claude Sonnet 5, Opus 5, Opus 4.7, Opus 4.8, Fable 5, all three GPT-5.6 variants and Grok 4.6.
+Ten models invoke but cannot be used for Agentic Control. Six reject `toolConfig` outright: DeepSeek R1, Llama 3 8B and 70B, Mistral 7B, Mixtral 8x7B, Palmyra Vision 7B. Four accept it but answer in prose rather than calling the tool: all three Gemma 3 sizes and Magistral Small. That distinction matters because the second group fails silently - the request succeeds and the agent simply never actuates the device.
+Verified one concrete trap worth naming: most current models are `INFERENCE_PROFILE` only and require the `us.` or `global.` prefix. `anthropic.claude-sonnet-4-5-20250929-v1:0` fails with 'Invocation of model ID ... with on-demand throughput isn't supported' while `us.anthropic.claude-sonnet-4-5-20250929-v1:0` and the `global.` form both succeed. BE would plausibly copy the bare ID from documentation and lose time to it.
+Recorded the full census in `aidlc-state.md` under Measured Environment Facts, and recommended Claude Haiku 4.5 as the Agentic Control default with Sonnet 4.5 as the quality option and Nova Lite as the cheap fallback, all three confirmed calling tools correctly.
+Noted that the census is per-account and does not transfer, which reinforces the `infra/README.md` prerequisite requirement rather than adding a new one."
+**Context**: INFRA stream. Census recorded in `aidlc-state.md`. Directly unblocks BE's model wiring decision.
+
+---
+## Opus 4.6 Evaluated and Rejected for Agentic Control
+**Timestamp**: 2026-08-20T09:25:00Z
+**User Input**: "opus 4.6 사용은 어떄"
+**AI Response**: "Benchmarked rather than opined. Ran a realistic Agentic Control request - Korean character system prompt, two tool definitions, tool call completed - across Opus 4.6, Opus 4.5, Sonnet 4.6, Sonnet 4.5, Haiku 4.5, Nova Lite and Nova Pro, three runs each, plus an 8-concurrent burst test for throttling.
+Opus 4.6 finished in 2.03s, apparently beating both Sonnet variants. That reading is misleading: it emitted 76 output tokens against Haiku's 140, so per-token throughput is 37/s versus Haiku's 75/s. On a tools-free two-to-three sentence Korean reply, where length was comparable, Opus 4.6 was slowest of all at 4.08s against Haiku's 2.88s. Reported the tokens-per-second ordering as the reliable signal and stated plainly that at n=3 the wall-clock gaps among Haiku, Sonnet and Opus are partly noise.
+Disclosed a measurement failure rather than papering over it: time-to-first-token, which is what a chat UI actually surfaces, could not be measured because the tooling buffered the whole stream before returning it. Only total latency is trustworthy.
+No throttling at 8 concurrent for either Opus 4.6 or Haiku 4.5; concurrent calls queue to ~4.4s and ~3.3s. Irrelevant for a single-operator demo.
+Recommended against Opus 4.6 on three grounds, ordered by weight. NFR-4.2 explicitly forbids slow generation on the critical path of a visible interaction and Agentic Control is that path. The task does not need the tier - even Nova Lite chose the right tool and extracted arguments correctly 3/3 against two tools with three arguments, so there is no demonstrated control-quality deficit to justify it. And it blurs the deliberate depth split, where Skill Discovery is DEEP with EXAONE reasoning while Agentic Control is BASELINE plumbing; putting the heaviest model on the plumbing weakens the rationale for having two models at all. Named cost as a secondary point rather than the argument - roughly 20x Haiku per token but negligible in absolute terms at demo volume.
+Noted that no runtime slot for Opus exists in this architecture, since the only non-interactive path is Skill Discovery and that is fixed to EXAONE by hackathon requirement. It stays useful as a build-time tool for authoring persona prompts or fixture patterns, which is not a runtime dependency.
+Recorded the benchmark table and the rejection rationale in `aidlc-state.md` so BE does not re-litigate the question."
+**Context**: INFRA stream. **Decision: Agentic Control stays on `us.anthropic.claude-haiku-4-5-20251001-v1:0`, escalating to `us.anthropic.claude-sonnet-4-6` only on demonstrated need. Opus 4.6 rejected.**
+
+---
+## Opus 4.6 Adopted - Earlier Rejection Reversed
+**Timestamp**: 2026-08-20T09:40:00Z
+**User Input**: "걍 opus 4.6쓰면 정말 정말 안되겠니?"
+**AI Response**: "Re-examined the objections rather than restating them, and reversed the recommendation. Two of the three did not survive.
+Withdrew the NFR-4.2 argument as overstated. The clause's own example is character art generated on level-up, so it targets slow generation that blocks a visible interaction rather than the latency of the reply that is the interaction. Reading it as a latency budget for chat replies stretched it.
+Partly withdrew the two-model-rationale argument. Agentic Control being BASELINE describes the depth of the control capability, but the character's voice and personality travel through the same model, and for a product selling an AI-characterized companion that is product value rather than plumbing. A stronger model writing better Korean character dialogue is a legitimate argument in favour, which the earlier answer undervalued.
+Kept one objection as still true: the task does not need that tier for tool selection, since even Nova Lite got it right 3/3. Opus buys dialogue quality, not control accuracy - a different and valid reason.
+Nothing in the measurements disqualifies it. Tool calling 3/3, no throttling at 8 concurrent, output terser than Haiku at 76 tokens against 140, cost negligible in absolute terms at demo volume. The one real cost is per-token throughput, 37/s against Haiku's 75/s.
+Attached one binding condition rather than approving unconditionally: **chat replies must stream.** Opus takes ~4.1s for a 2-3 sentence Korean reply against Haiku's 2.9s. Streamed via `ConverseStream` that reads as the character speaking and the gap is barely perceptible; unstreamed it is four seconds of blank screen and the demo suffers. Surfaced a documented tension FE and BE must resolve in favour of streaming - `application-design.md` section 8 fixes REST for everything user-initiated, which read literally makes a chat reply a plain JSON response, while `execution-plan.md` section 4 lists streamed replies in FE's scope.
+Added two supporting measures. The model ID becomes `BEDROCK_MODEL_ID` in the environment contract rather than a literal, so reverting to Haiku during rehearsal is a config flip rather than a code change - which is what makes committing to Opus cheap and reversible. And `maxTokens` capped near 300 with a 2-3 sentence instruction in the system prompt, since Opus's competitive wall clock comes from terseness and that should be pinned rather than assumed.
+Updated `aidlc-state.md` with the decision, the binding streaming condition, and the full history of the reversal including which objections were withdrawn and why."
+**Context**: INFRA stream. **Decision: Agentic Control uses `us.anthropic.claude-opus-4-6-v1` via `BEDROCK_MODEL_ID`, conditional on streamed chat replies. Haiku 4.5 documented as the fallback.**
+
+---
+## Opus 4.6 Conditions Cleared, Construction Approved to Start
+**Timestamp**: 2026-08-20T09:50:00Z
+**User Input**: "모델ID를 환경변수로 넣는 방식으로 하시죠. 채팅 응답은 당연히 스트리밍 방식이라 괜찮습니다.
+
+그리고 레벨업 시 캐릭터 아트 생성이 캐릭터 디자인을 말하는 것이면, 그건 gen ui방식으로 생성할 것이 아니라 사전에 제작된 캐릭터 애니메이션 파일을 사용할 것이라 신경쓰지 않아도 될 것 같음.
+
+불필요한 공통 md파일 수정은 최대한 지양하고 진행합시다. construction 진행 단계 가도 되면 ok 해주세요. branch checkout하고 세션 진행하게"
+**AI Response**: "Both Opus 4.6 conditions cleared: `BEDROCK_MODEL_ID` as an environment variable is confirmed, and chat replies are streamed so the latency objection is closed. Character art uses pre-made animation files rather than runtime generation, so NFR-4.2's only concrete example is already satisfied by design - which independently supports withdrawing it as a latency argument.
+Noted the directive to stop making unnecessary edits to the shared markdown files and trimmed this round to two things: converting the streaming condition from open to satisfied so BE does not read it as an unresolved question, and this audit entry, which the workflow rules require. No other shared-file edits from here unless a decision actually changes.
+Confirmed Construction is clear to start on branch `construction/infra`."
+**Context**: INFRA stream. Opus 4.6 unconditional. Construction approved to begin.
+
+---
+## Construction - INFRA Functional Design Started
+**Timestamp**: 2026-08-20T08:36:49Z
+**User Input**: "AI-DLC Construction, INFRA 담당"
+**AI Response**: "Resumed the approved INFRA unit on branch `construction/infra`. Loaded the mandatory common rules, extension opt-in prompts and saved enablement state, Functional Design rules, Ponytail Construction constraints, all relevant Inception artifacts, and measured environment decisions. Confirmed that Infrastructure Design is skipped; the active stage is INFRA Functional Design. Created `aidlc-docs/construction/plans/infra-functional-design-plan.md` with four decision questions covering the BE-to-INFRA DynamoDB contract, EC2 scope, DynamoDB operational posture, and local IAM approach. No design artifacts or code were generated before answers."
+**Context**: CONSTRUCTION - INFRA Functional Design, Step 4 complete. Waiting at Step 5 for all plan answers.
+
+---
+## Construction - INFRA Functional Design Question Translation
+**Timestamp**: 2026-08-20T08:40:41Z
+**User Input**: "결정 질문을 한글로 번역해서 알려주고, 내가 대답하면 그대로 너가 문서에 반영해주렴"
+**AI Response**: "Translated the four INFRA Functional Design decision questions into Korean in chat while preserving the English artifact as the document of record. The user's chat answers will be transcribed verbatim into the corresponding `[Answer]:` tags."
+**Context**: CONSTRUCTION - INFRA Functional Design, Step 5 answer collection.
+
+---
+## Construction - INFRA Functional Design Answers Received
+**Timestamp**: 2026-08-20T08:45:51Z
+**User Input**: "Q1 B. 일단 인프라 가용 환경을 구성해놓고, BE에서 정의한 내용을 바탕으로 확장할수있도록 구성되면 좋을듯
+
+Q2 B.
+
+Q3 A
+
+Q4 A"
+**AI Response**: "Transcribed all four chat answers verbatim into `infra-functional-design-plan.md`. Q2=B and Q4=A are compatible: because EC2 is now selected, its actually used instance role will be created, while no unused standalone role or managed policy is created. Detected one ambiguity in Q1: option B says BE adapts to an INFRA-authored provisional schema, while the explanation says INFRA should expand from BE's later definitions. Added Question 5 to distinguish runtime-first deployment from committing an unverified DynamoDB base key or table boundary. Design generation remains blocked only on Question 5."
+**Context**: CONSTRUCTION - INFRA Functional Design, Step 5 answer validation. Q1-Q4 recorded; one clarification pending.
+
+---
+## Construction - INFRA Functional Design Clarification Resolved
+**Timestamp**: 2026-08-20T08:50:39Z
+**User Input**: "A"
+**AI Response**: "Recorded Question 5 as A. The initial stack is runtime-first: CDK bootstrap, minimal EC2, its used instance role, networking/security group, and environment publication. No placeholder DynamoDB table or immutable base key is created. DynamoDB is added in a later CDK update after BE supplies validated access patterns. Generated and validated the three mandatory Functional Design artifacts. Ponytail/YAGNI review reduced the domain artifact from eight speculative records to three documentation contracts."
+**Context**: CONSTRUCTION - INFRA Functional Design, Steps 5-6 complete.
+
+---
+## Construction - INFRA Functional Design Approval Prompt
+**Timestamp**: 2026-08-20T08:50:39Z
+**User Input**: "N/A - AI approval prompt"
+**AI Response**: "Presented the standardized two-option Functional Design completion gate for INFRA. Review path: `aidlc-docs/construction/infra/functional-design/`. Next stage on approval: Code Generation."
+**Context**: CONSTRUCTION - INFRA Functional Design, Step 7 review gate. Awaiting explicit Request Changes or Continue to Next Stage response.
+
+---
+## Construction - INFRA Functional Design Approval Prompt Language
+**Timestamp**: 2026-08-20T08:52:02Z
+**User Input**: "한국어로 말해줘"
+**AI Response**: "Re-presented the Functional Design completion summary and the same two-option approval gate in Korean."
+**Context**: CONSTRUCTION - INFRA Functional Design review gate. No stage decision recorded yet.
+
+---
+## Construction - INFRA Functional Design Korean Review
+**Timestamp**: 2026-08-20T08:53:31Z
+**User Input**: "aidlc-docs/construction/infra/functional-design/ 의 설계문서 내용을 한국어로 전달해주세요. 그리고 핵심 3줄 요약"
+**AI Response**: "Presented a Korean walkthrough of all three INFRA Functional Design artifacts and a three-line core summary. No design decision or approval status was changed."
+**Context**: CONSTRUCTION - INFRA Functional Design review support.
+
+---
+## Construction - INFRA Secret Placement Clarification
+**Timestamp**: 2026-08-20T08:58:01Z
+**User Input**: "실제 FRIENDLI_API_KEY 는 어디에 쓰면 되니?"
+**AI Response**: "Verified `.env-example` and `.gitignore` without reading the real `.env`. Clarified that the actual local Friendli key belongs only in the workspace-root `.env`, which is already gitignored; `.env-example` must contain only an empty placeholder. For later EC2 application deployment, the key must be installed server-side through a protected runtime environment file or managed secret path, never CDK context, user data, stack output, source, or chat."
+**Context**: CONSTRUCTION - INFRA Functional Design review support. No secret value was read or written.
+
+---
+## Construction - INFRA Managed Secret Clarification
+**Timestamp**: 2026-08-20T08:59:36Z
+**User Input**: ".env 값은 나중에 aws의 어떤 key 서비스같은데에 들어가진 않는건지?"
+**AI Response**: "Clarified the local-versus-hosted secret lifecycle. Local development keeps the Friendli key in the gitignored root `.env`; hosted EC2 should retrieve only the secret value from an AWS managed secret store. Recommended SSM Parameter Store SecureString as the lean default for one manually rotated hackathon key, with Secrets Manager reserved for automatic rotation or richer secret lifecycle needs. Non-secrets remain ordinary environment configuration, AWS credentials come from the EC2 instance role, and the secret value must not enter CDK context, CloudFormation templates/outputs, user data, logs, or source. No design change was recorded pending user confirmation."
+**Context**: CONSTRUCTION - INFRA Functional Design review support. Managed-secret choice discussed, not yet approved as a design change.
+
+---
+## Construction - INFRA Functional Design Change Applied
+**Timestamp**: 2026-08-20T09:05:01Z
+**User Input**: "SSM방식으로 반영"
+**AI Response**: "Applied SSM Parameter Store SecureString to all three INFRA Functional Design artifacts. Local development keeps the Friendli key in the gitignored root `.env`; hosted EC2 references `/prompthon/friendli-api-key`, encrypted by the default `alias/aws/ssm` key. The EC2 role receives exact-parameter `ssm:GetParameter` only, the startup path requests decryption and injects the key into process memory, and the plaintext remains outside CDK, CloudFormation, User Data, disk, logs, outputs, and source. The operator creates or updates the parameter outside CDK. Secrets Manager, a customer-managed KMS key, automatic rotation, and path-wide SSM permissions were deliberately excluded by YAGNI."
+**Context**: CONSTRUCTION - INFRA Functional Design change request applied and validated.
+
+---
+## Construction - INFRA Functional Design Approval Prompt Repeated
+**Timestamp**: 2026-08-20T09:05:01Z
+**User Input**: "N/A - AI approval prompt"
+**AI Response**: "Re-presented the standardized two-option Functional Design completion gate in Korean after applying the SSM revision. Review path remains `aidlc-docs/construction/infra/functional-design/`; next stage on approval is Code Generation."
+**Context**: CONSTRUCTION - INFRA Functional Design review gate. Awaiting explicit Request Changes or Continue to Next Stage response.
+
+---
+## Construction - INFRA Functional Design Approved and New-Session Handoff
+**Timestamp**: 2026-08-20T09:07:10Z
+**User Input**: "다음단계 Code Generation 단계를 새로운 세션에서 진행하려고 합니다. 가능할까요"
+**AI Response**: "Accepted this as explicit approval of the revised INFRA Functional Design. Updated the Functional Design plan to approved and moved `aidlc-state.md` to `INFRA Code Generation - waiting for new-session Part 1 planning`. Recorded the exact new-session prompt `AI-DLC Construction, INFRA Code Generation 진행`, the approved implementation scope, the mandatory Code Generation planning gate, the SSM SecureString boundary, and the rule that no placeholder DynamoDB table is created before BE supplies validated access patterns. Confirmed the branch is `construction/infra`. No code generation, commit, or secret read occurred in this session."
+**Context**: CONSTRUCTION - INFRA Functional Design approved. Handoff complete; Code Generation Part 1 must start in a new session.
+
+---
+## Construction - New-Session Handoff Consistency Correction
+**Timestamp**: 2026-08-20T09:07:10Z
+**User Input**: "N/A - handoff validation"
+**AI Response**: "During handoff verification, corrected two stale state lines that still said Application Design awaited approval and INFRA Functional Design had not run. Both now reflect their approved/completed status so the new session cannot resume from the wrong gate."
+**Context**: CONSTRUCTION - INFRA Code Generation handoff validation.
+
+---
+## Construction - INFRA Code Generation Part 1 Planning
+**Timestamp**: 2026-08-20T10:05:00Z
+**User Input**: "AI-DLC Construction, INFRA Code Generation 진행"
+**AI Response**: "Started INFRA Code Generation in a new session on branch `construction/infra`. Loaded `construction/code-generation.md`, the ponytail core-ladder, all three approved INFRA Functional Design artifacts, `unit-of-work.md`, and `aidlc-state.md`. Re-verified the live account read-only: identity `WSParticipantRole/Participant` in `us-east-1`, CDK still not bootstrapped (0 S3 buckets), DynamoDB still 0 tables, default VPC `vpc-0e879b6764ca8fc90` with six public subnets, `ssm:DescribeInstanceInformation` and `ssm:GetParameter` permitted for this principal, and `/prompthon/friendli-api-key` returning `ParameterNotFound` as expected. The real `.env` was not read and no secret value was accessed. Created the mandatory Part 1 plan at `aidlc-docs/construction/plans/infra-code-generation-plan.md` with 14 numbered checkbox steps, an explicit deliberate-omissions list, and a documented workspace-root correction (`aidlc-state.md` still records a path from a different machine). Two decisions Functional Design deferred to this stage were resolved in the plan: the management path is SSM Session Manager with zero inbound rules and no key pair, and the CDK CLI is pinned at `2.1135.0` as an `infra` devDependency. One open item is carried to the user as Step 3b rather than being decided silently: whether the EC2 role receives its Bedrock and Transcribe grants now or defers them to the later DynamoDB update. No code was generated."
+**Context**: CONSTRUCTION - INFRA Code Generation Part 1. Plan created; approval gate presented.
+
+---
+## Construction - INFRA Code Generation Plan Approval Prompt
+**Timestamp**: 2026-08-20T10:05:00Z
+**User Input**: "N/A - AI approval prompt"
+**AI Response**: "Presented the INFRA Code Generation plan summary and the Part 1 approval gate in Korean. Review path is `aidlc-docs/construction/plans/infra-code-generation-plan.md`. Highlighted that Step 8 runs a real `cdk bootstrap`, which creates the account-level `CDKToolkit` stack including an S3 staging bucket, an ECR repository, an SSM parameter, and five IAM roles, and that Step 9 runs a real `cdk deploy` that creates a billable `t3.small` instance. Requested an answer to Step 3b along with the approval. Part 2 will not start until the user explicitly approves."
+**Context**: CONSTRUCTION - INFRA Code Generation Part 1 approval gate. Awaiting explicit Request Changes or Approve response.
+
+---
+## Construction - INFRA Code Generation Plan Approved
+**Timestamp**: 2026-08-20T10:12:00Z
+**User Input**: "1 A / 2 승인 생성해도됨"
+**AI Response**: "Recorded explicit approval of the INFRA Code Generation plan and the Step 3b decision as option A: the EC2 instance role receives its Bedrock and Transcribe grants now, with Bedrock actions scoped to `foundation-model/*` and `inference-profile/*` in `us-east-1` and `transcribe:StartStreamTranscription` unavoidably on `*`. The user also accepted the two risk notices, so Step 8 runs a real `cdk bootstrap` creating the account-level CDKToolkit stack and Step 9 runs a real `cdk deploy` creating a billable t3.small instance. Part 1 marked complete; proceeding to Part 2 generation following the approved plan step sequence with no deviation."
+**Context**: CONSTRUCTION - INFRA Code Generation Part 1 approved. Part 2 generation started.
+
+---
+## Construction - INFRA Code Generation Part 2 Complete and Deployed
+**Timestamp**: 2026-08-20T10:36:00Z
+**User Input**: "N/A - Part 2 execution under the approved plan"
+**AI Response**: "Executed all 39 steps of the approved INFRA Code Generation plan and marked every checkbox. Created the root npm workspace, the `infra/` CDK workspace with `aws-cdk-lib` pinned exactly at 2.266.0 and the CDK CLI at 2.1135.0, `infra/bin/prompthon-infra.ts`, `infra/lib/runtime-stack.ts`, the `node:test` template-assertion check, `infra/README.md`, and the extended `.env-example` environment contract. Ran the real `cdk bootstrap` (CDKToolkit CREATE_COMPLETE, 12 resources including five IAM roles) and the real `cdk deploy` (prompthon-runtime CREATE_COMPLETE in 175s), then a second deploy after the review pass reaching UPDATE_COMPLETE with a clean `cdk diff`. Verified against the live API rather than exit codes: stack complete, instance `i-0ede6aab809e7c1b0` running with its instance profile attached, security group with zero inbound rules, DynamoDB still 0 tables proving no placeholder was created, SSM agent Online proving the Session Manager management path actually works, encrypted 20 GiB gp3 root volume, IMDSv2 required, no key pair, and stack outputs free of credentials. The SSM parameter `/prompthon/friendli-api-key` is absent as expected, which blocks hosted-backend readiness only. Published `runtime-contract.md` and `deployment-evidence.md` under `aidlc-docs/construction/infra/code/`. The real FRIENDLI_API_KEY was never read; `.env` was confirmed gitignored via `git check-ignore` without opening it. The pre-existing `bedrock-apikey` stack was left untouched."
+**Context**: CONSTRUCTION - INFRA Code Generation Part 2. All plan steps complete, stack deployed and verified.
+
+---
+## Construction - INFRA Ponytail Review, Two Cycles
+**Timestamp**: 2026-08-20T10:32:00Z
+**User Input**: "N/A - mandatory reviewer dispatch before the Step 14 gate"
+**AI Response**: "Dispatched `ponytail-reviewer` twice and applied findings between cycles, then re-deployed so the live stack matches the reviewed code. Substantive change: removed `bedrock:Converse` and `bedrock:ConverseStream` from the instance role after verifying against AWS documentation that they are not IAM action names and that the Converse API authorizes on `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`, both already granted. Also cut three stack outputs that echoed compile-time constants, replaced a six-line `formatArn` call with a literal ARN, trimmed `tsconfig.json` to non-default options, folded two tests into one, dropped two single-use npm script wrappers, de-duplicated prose across `.env-example` and `README.md`, and removed the hard `us-east-1` guard in the CDK app because the account SCP already denies other regions and pinning a region in code works against the portability this artifact exists for. Rejected five findings with recorded reasons: the encrypted root volume is a security measure, the no-DynamoDB and no-secret tests are demanded by validation rules 4 and 5/9, the `packages/*` workspace glob prevents BE and FE editing a shared root file from parallel branches, and the README environment-variable table is named as required content in `aidlc-state.md`. All findings resolved within the two-cycle cap; none carried over."
+**Context**: CONSTRUCTION - INFRA Code Generation ponytail review loop. Applied and re-deployed.
+
+---
+## Construction - INFRA State Corrections
+**Timestamp**: 2026-08-20T10:36:00Z
+**User Input**: "N/A - state validation"
+**AI Response**: "Corrected three stale facts in `aidlc-state.md` found while updating it. The workspace root was recorded as `/Users/sehoonbyun/Documents/prompthon`, a path on a different machine; it is `/Users/hyunjin/prompthon/2026-prompthon-WDC`. The measured-environment section still said CDK was not bootstrapped and the monorepo was not initialised, both now superseded by this deployment, annotated rather than deleted so the 08:12 survey stays readable. Added a deployed-runtime section recording the stack, instance, role, security group, granted actions, and the Bedrock IAM action correction, and rewrote the Next Step section from an INFRA handoff into a BE handoff. `audit.md` was appended to, never rewritten."
+**Context**: CONSTRUCTION - INFRA Code Generation state and audit update.
+
+---
+## Construction - INFRA Code Generation Review Gate
+**Timestamp**: 2026-08-20T10:36:00Z
+**User Input**: "N/A - AI approval prompt"
+**AI Response**: "Presented the standardized two-option Code Generation completion gate for the INFRA unit in Korean. Review paths are `infra/` for application code and `aidlc-docs/construction/infra/code/` for documentation. Next stage on approval is BE or FE Code Generation, with joint Build and Test after all three units."
+**Context**: CONSTRUCTION - INFRA Code Generation review gate. Awaiting explicit Request Changes or Continue to Next Stage response.
+
+---
+## Construction - INFRA Bedrock IAM Action Claim Corrected
+**Timestamp**: 2026-08-20T11:05:00Z
+**User Input**: "bedrock:Converse 오류 서술 수정하세요"
+**AI Response**: "Corrected a factual error the AI introduced during the ponytail review. Four documents claimed `bedrock:Converse` and `bedrock:ConverseStream` are not IAM action names. They are. AWS documents them as valid entries when writing an explicit Deny, alongside the `bedrock:InvokeModel*` wildcard form. The accurate rule is directional: in an Allow policy `InvokeModel` and `InvokeModelWithResponseStream` suffice because Converse depends on Invoke, while in a Deny policy enumerating Converse explicitly is valid. Removing the two entries from the deployed Allow policy was therefore still correct, and a real `bedrock-runtime converse` call executed from the instance under the reduced policy proved it. Updated `aidlc-state.md`, `runtime-contract.md`, `deployment-evidence.md`, and `infra-code-generation-plan.md`, each stating what the earlier claim was and why it was wrong rather than silently rewriting it. The wrong claim mattered because it would have misled whoever writes a Deny or SCP policy later."
+**Context**: CONSTRUCTION - INFRA documentation correction. No code or infrastructure change.
+
+---
+## Construction - INFRA DynamoDB Handoff Simplified
+**Timestamp**: 2026-08-20T11:10:00Z
+**User Input**: "- 호출자/연산/소유자 경계/일관성/필드/결과 상한/RPS -> 너무 과함. be에서 정한 dynamoDB 사용 범위에 따라서 key값, 테이블 추가 등만 결정하고, 나머지는 데모 수준의 일반적이고 보편적으로 사용하는 수준으로 진행하면 좋을듯"
+**AI Response**: "Accepted the directive and withdrew the seven-field access-pattern contract from the INFRA Functional Design as over-process for a 1.5-day demo. BE's obligation is now only to state what it persists and how it looks each thing up, which its repository code satisfies without a separate document. INFRA decides table count and keys from that; capacity, encryption, Streams, TTL, PITR, deletion protection and removal policy take fixed demo defaults and are not decided per table. `Scan` downgraded from a rejection to a reviewer note, since it performs fine at demo volume. Two rules deliberately kept as hard constraints rather than defaulted: keys must derive from a server-known owner instead of a client-supplied identifier, because that is a security property rather than a performance preference, and partition/sort keys are immutable so changing one replaces the table. That immutability is now stated as the single real reason provisioning waits for BE at all. Renamed the `BackendAccessPattern` record to `BackendDataUsage` and shortened its state machine from five states to four. Updated `business-rules.md`, `business-logic-model.md`, `domain-entities.md`, `runtime-contract.md`, `aidlc-state.md`, and the code-generation plan, annotating each change with what it replaced so the earlier decision trail stays readable."
+**Context**: CONSTRUCTION - INFRA Functional Design and handoff simplification by user directive. No infrastructure change; DynamoDB remains unprovisioned.
+
+---
+## Construction - INFRA Code Generation APPROVED
+**Timestamp**: 2026-08-20T11:40:00Z
+**User Input**: "현재 ai-dlc 코드 생성단계 승인. 커밋 -> push -> PR 생성까지 진행"
+**AI Response**: "Recorded explicit approval of INFRA Code Generation. Marked the INFRA unit complete in `aidlc-state.md` and moved the current stage to BE and FE Code Generation with joint Build and Test after. Before committing, removed a truncated SHA-256 fragment of the live Friendli key from `deployment-evidence.md` — the integrity check result is retained but the hash itself does not belong in a repository that gets pushed to a remote. Proceeding to stage the INFRA files specifically, commit, push the `construction/infra` branch with upstream tracking, and open a pull request. `.kiro/settings/mcp.json` is modified but unrelated to this unit and is left unstaged."
+**Context**: CONSTRUCTION - INFRA Code Generation approved. Unit complete; proceeding to commit, push, and PR.
+
+---
+## Construction - INFRA Commit, Push, and PR
+**Timestamp**: 2026-08-20T11:45:00Z
+**User Input**: "N/A - executing the approved commit/push/PR request"
+**AI Response**: "Committed the INFRA unit as `1310e69` on branch `construction/infra`, pushed with upstream tracking, and opened PR #6 against `main` at https://github.com/MD-team-project/2026-prompthon-WDC/pull/6. Staged 24 files by name rather than with `git add .`: the root workspace files, the whole `infra/` workspace, and the INFRA construction artifacts. `.kiro/settings/mcp.json` was deliberately left unstaged as unrelated tooling config. Pre-commit checks: scanned all tracked files for Friendli, AWS access key, and bearer token patterns with no matches; re-confirmed `.env` is gitignored via `git check-ignore`; verified `node_modules/` and `cdk.out/` are excluded. The PR body records what was verified from inside the instance, what is deliberately absent with its unlock condition, the blocked items, and the corrected Bedrock IAM action note for reviewers."
+**Context**: CONSTRUCTION - INFRA unit delivered. PR #6 open for review.
+
+---
+## Construction - INFRA DynamoDB Table Created Up Front
+**Timestamp**: 2026-08-20T11:55:00Z
+**User Input**: "be가 코드를 쓸때 연결할 수 있도록 하는 테이블 구성이 먼저 필요할 것 같음. pk를 id값으로 하면 되려나"
+**AI Response**: "Advised against `pk = item id` and explained why: it makes every item its own partition, which allows point lookups only and destroys the range queries Skill Discovery depends on, leaving `Scan` as the only option. Recommended `pk` = server-known owner and `sk` = discriminator plus sort order, which serves character profile, skill list, usage-event time windows, and feedback entirely from the base key with zero indexes. Then created the table, reversing the earlier decision to wait for BE. The reversal is justified rather than arbitrary: the only immutable part of a table is its base key, and `pk`/`sk` as plain strings encode no domain meaning, so there is nothing that can turn out wrong later. Item-key conventions such as `CHARACTER#pral` are BE's data rather than schema and remain changeable at any time, so the table constrains BE in no way. Deployed `prompthon-app` on-demand with `DESTROY`, granted the instance role read and write scoped to that table ARN only, and published `APP_TABLE_NAME` in the environment contract and as a stack output. Third `cdk deploy`, 44 s, `UPDATE_COMPLETE`, diff containing only the table, the policy change, and one output. Verified from the host under instance-role credentials: `put-item` succeeded, a `begins_with(sk, 'EVENT#')` query returned 1, `delete-item` cleaned up. `describe-table` confirms `ACTIVE`, `pk` HASH plus `sk` RANGE, `PAY_PER_REQUEST`, and no GSI or LSI. Replaced the now-obsolete 'no DynamoDB placeholder' template assertion with assertions on shape — one table, meaning-neutral base keys, on-demand, no LSI, and every DynamoDB grant scoped to the table ARN. 5 tests pass, `cdk diff` clean. Recorded that GSIs are added one per deploy because CloudFormation refuses more than a single index change per stack update, and that LSIs are permanently excluded since they cannot be added after creation. Updated `aidlc-state.md`, `runtime-contract.md`, `deployment-evidence.md`, `business-rules.md`, `ARCHITECTURE.md`, `.env-example`, and regenerated the architecture diagram."
+**Context**: CONSTRUCTION - INFRA follow-up. DynamoDB provisioned and verified; BE is now unblocked on persistence.
+
+---
+## Construction - INFRA Aligned to BE PR #7, Table Key Schema Corrected
+**Timestamp**: 2026-08-20T12:20:00Z
+**User Input**: "중요: BE 담당이 PR을 올려두었습니다(PR#7) 해당 내용을 확인하여 인프라에서 수정 및 반영하거나 정의해야되는 부분을 진행하세요" / "provision을 하면 나머지눈 BE에서 직접 client 연결해서 할게" / "현재 구성대로 제대로 프로비전되어있는지 확인하고, BE가 이어받아갔을때 반드시 수정해야하는 사항을 PR 내용 혹은 문서 필요한 곳에 명시"
+**AI Response**: "Read all 45 files of BE PR #7 and found the provisioned table incompatible with BE's code. `packages/backend/src/data/skills.ts` addresses items by `id` alone with no sort key, so every `Key: { id }` call against the `pk`/`sk` table would have failed with `ValidationException`. Replaced the table with partition key `id` (String), no sort key. The earlier `pk`/`sk` choice was solving a problem this codebase does not have: BE keeps usage events in memory by its own deliberate deferral, so skills are the only thing persisted and they are read by id plus a Scan filter. BE's data-access code is the contract, and changing 4 lines of infra beat changing 5 functions plus a shared type plus 6 call sites in BE.
+
+The first replacement attempt FAILED because `tableName: 'prompthon-app'` was pinned: CloudFormation cannot replace a custom-named resource, since it would create the replacement before deleting the original and the names collide. Stack rolled back cleanly to `UPDATE_ROLLBACK_COMPLETE`. Fixed by removing `tableName` entirely rather than renaming, which also prevents the same wall on any future key change. Second deploy succeeded in 56 s.
+
+Verified the full deployed state: `cdk diff` 0 differences, `tsc` clean, 5/5 template assertions, 8 stack resources all complete, and from inside the instance under instance-role credentials - Bedrock `converse` returned OK, the SSM SecureString decrypts at 56 bytes, DynamoDB `describe-table` ACTIVE plus a put/get/delete round trip using the same call shapes as `skills.ts`, Friendli egress reachable, 0 inbound rules, exactly 1 table. Reported honestly that Transcribe streaming is granted but unverifiable without a real audio stream, and that `list-transcription-jobs` is correctly denied because it was never granted.
+
+Documented five blocking items BE must fix, in `runtime-contract.md` under a MANDATORY heading and mirrored into `aidlc-state.md`: `DDB_TABLE_NAME` must be set because the `prompthon-local` default does not exist; `engines.node` must be `>=22` not `>=20` since `@langchain/openai@^1.5.9` requires it; root `workspaces` must include `infra` or CDK dependencies stop installing; `.env-example` omits `FRIENDLI_ENDPOINT_ID` which `config.ts` wraps in `required()` so the backend throws at boot; and on EC2 the Friendli key must come from SSM rather than a copied `.env`. Added three advisory items - no `maxTokens` cap on `bedrockChat`, progression has no storage layer so level and exp reset on restart, and the four first-hour Friendli checks remain BE's to run.
+
+Also prepared merge resolutions for the four files both branches touch - `package.json`, `.env-example`, `.gitignore`, `package-lock.json` - and declared `\"type\": \"commonjs\"` in `infra/package.json` since BE's root sets `\"type\": \"module\"`. Regenerated the architecture diagram."
+**Context**: CONSTRUCTION - INFRA aligned to BE's actual data-access code. Table re-provisioned and verified; BE handoff published with blocking items.
+
+---
+## Construction - INFRA Team AWS Access Decided as Shared Credentials
+**Timestamp**: 2026-08-20T12:45:00Z
+**User Input**: "지금 내 aws 계정 내에서 생성되어서 BE 개발자 측의 접근 권한이 없음. 공통 권한을 가진 범위 내로 할 수 있는지, 아니면 한사람의 aws 계정 정보로 공통으로 사용해야될지 알려줘" / "A로 해서 자격증명 공유할 수 있도록하는게 좋을듯요"
+**AI Response**: "Probed the account rather than assuming. Confirmed `iam:CreateUser` is denied by actually attempting it - `WSParticipantRole` carries `PowerUserAccess`, which excludes IAM writes, so a per-developer IAM user with access keys is impossible. Also ruled out reusing the pre-existing `bedrock-apikey` IAM user: its only policy is `AmazonBedrockLimitedAccess`, so an access key for it could not reach DynamoDB or Parameter Store even if one could be issued. Established that the operator's own credentials are temporary Workshop Studio session credentials - access key, secret, and session token, with no expiry recorded locally - which means expiry affects `cdk deploy` too, not just the developers.
+
+Presented three workable options with the tradeoff each carries: shared Workshop Studio credentials, per-developer deployment into their own account using the portable IaC, or an IAM role each developer assumes from their own AWS identity. Noted that developing without AWS access is only partly possible, since DynamoDB can be substituted but Bedrock cannot and the entire control path depends on it.
+
+User chose shared credentials. Wrote `infra/ACCESS.md` with the procedure: which three values to share, the mandatory profile name `prompthon` since `.env` and every repo command assume it, four verification commands covering identity, table, Bedrock and the secret, expiry symptoms and recovery, and the instruction to share only over a private channel and never a commit, PR, or issue. Recorded two cautions honestly rather than glossing them: every team member holds PowerUserAccess and could destroy the verified deployment, and CloudTrail attributes every action to `WSParticipantRole/Participant` so there is no attribution between people. Kept the two rejected alternatives documented with the condition that would make each viable. No credential value was read, printed, or written anywhere - only the key names present in the profile were inspected."
+**Context**: CONSTRUCTION - INFRA team access procedure published. No infrastructure change.
+
+---
+## Construction - INFRA Resolution for BE's Cross-Account Blocker on PR #6
+**Timestamp**: 2026-08-20T13:40:00Z
+**User Input**: "현재 브랜치 PR에 남겨져있는 코멘트 읽어서 해결방안 만들어내라"
+**AI Response**: "Read both comments on PR #6 (`gh pr view 6`; no reviews exist, only issue comments). The first is INFRA's own follow-up and is already superseded by commit 4ca5667. The live item is BE's 13:17Z comment: BE local is account `466501979672`, the deployed stack is in `643922457910`, so BE cannot reach the table and offered three unblock paths.
+
+Probed each path against the live account rather than reasoning about it. **Option 1's resource-policy form is impossible**: `dynamodb:PutResourcePolicy` is refused by an explicit deny in SCP `arn:aws:organizations::733415556254:policy/o-1ua8520d1t/service_control_policy/p-a4aol0sp`. The probe was deliberately non-granting - the principal was this account's own root, for `DescribeTable` only, scheduled for immediate deletion - and it never got far enough to change anything. An explicit SCP deny cannot be overridden by any policy, so no table policy works here. `GetResourcePolicy` is permitted and confirms the table carries none. **Option 1's assumable-role form is permitted on this side**: probed `iam:CreateRole` with a malformed trust document and got `MalformedPolicyDocument: Policy has no statements`, meaning authorization passed before validation; no role was created. But BE's half - whether `466501979672` allows `sts:AssumeRole` outward - is not observable from here and the same org already denies `PutResourcePolicy`. **Option 3 is viable now**: instance `i-0ede6aab809e7c1b0` is SSM `PingStatus: Online`, agent 3.3.4624.0.
+
+Confirmed BE is not misconfigured. `ResourceNotFoundException` is the correct answer to a cross-account lookup by name, because DynamoDB table names are account-scoped - BE's client resolved the name inside its own account. Both ARNs are `WSParticipantRole/Participant`, which is what Workshop Studio issues per participant, so these are two genuine sandboxes and not a pasted-credential error.
+
+Recommended a fourth path neither comment considered, and recommended it over all three: **BE creates an equivalent table in their own account with one `create-table` command** - `id` String HASH, no sort key, no index, on-demand - and points `DDB_TABLE_NAME` at it. Same schema as deployed, so it exercises the same `skills.ts` call shapes, with no cross-account plumbing and no SCP exposure. Explicitly not `cdk deploy` into BE's account: it would work, since the stack reads `this.account`/`this.region`, but it also stands up a `t3.small` and an instance profile BE has no use for. Option 3 stays on the list rather than becoming a fallback, because the local table cannot prove `table.grantReadWriteData(role)` resolves - only the instance role can, and that is the acceptance test. Published a table separating what each verification actually covers.
+
+Found and fixed a defect while verifying: `.env-example` carried `DDB_TABLE_NAME=prompthon-app`, a name from the withdrawn fixed-name revision that exists in neither account, so anyone copying the template got a backend failing on every DynamoDB call - the same failure BE hit, from a different cause. It now carries the real generated name, states that the name is CloudFormation-generated and therefore account-specific, points at the `DdbTableName` stack output as the source, and warns against pointing it at `643922457910`'s table from outside. `runtime-contract.md` and `ARCHITECTURE.md` were already correct and were left alone.
+
+Published `aidlc-docs/construction/infra/code/cross-account-access.md`. Live state re-probed and recorded there: stack `UPDATE_COMPLETE`, table `ACTIVE` with `id` HASH only, 0 GSI, 0 items, no resource policy, instance SSM Online. No secret was read; no infrastructure was changed."
+**Context**: CONSTRUCTION - INFRA response to PR #6 review comment. Resolution published; no infrastructure change. PR reply not yet posted - awaiting user confirmation.
+
+---
+## Construction - Resolution Changed to Shared Credentials, Other-Session Diffs Reverted
+**Timestamp**: 2026-08-20T13:55:00Z
+**User Input**: "나의 자격증명을 공유하는 방식으로 만들고, pr올릴것.
+
+이 세션 말고 다른곳에서 수정한 diff는 없앨것"
+**AI Response**: "Changed the recommendation from 'BE creates an equivalent table in their own account' to BE's **option 2: account `643922457910` is canonical and the team shares one credential set**. Rewrote `cross-account-access.md` around that.
+
+Added the argument for option 2 over the assumable-role form, which the previous draft did not make: a role scoped to the table leaves BE without Bedrock or the Friendli SSM parameter, both of which BE needs, so it would have to be widened until it becomes option 2 with extra steps. The SCP finding that kills option 1's resource-policy form is unchanged and still the load-bearing evidence.
+
+Verified all four setup checks under the shared credential set rather than copying them from a prior draft, since the whole document rests on those credentials actually reaching what BE needs. Recorded observed outputs: identity `643922457910` / `WSParticipantRole/Participant`; table `ACTIVE` with keys `[\"id\"]`; Bedrock `converse` returns `OK` on both `us.anthropic.claude-opus-4-6-v1` (the configured `BEDROCK_MODEL_ID`) and `us.anthropic.claude-haiku-4-5-20251001-v1:0`; `/prompthon/friendli-api-key` present as `SecureString` version 2, length 56. No secret value was printed or stored - only its length.
+
+Stated the cost of sharing rather than presenting it as free: every member holds `PowerUserAccess` so anyone can delete the stack, with `cdk destroy` named as the specific hazard against the three-day account-deletion constraint; and CloudTrail attributes everything to `WSParticipantRole/Participant` so there is no attribution. Recorded that per-person IAM users are not an available alternative - `iam:CreateUser` is denied because `PowerUserAccess` excludes IAM writes, verified by attempting it - so the real choice was shared credentials or separate accounts, and separate accounts is what produced this blocker.
+
+Kept option 3 as the last mile rather than a fallback, with a table showing that shared credentials cannot exercise `table.grantReadWriteData(role)` because a local run authenticates as the participant role, not the instance role.
+
+**Reverted all diffs originating outside this session, as directed.** `git checkout` on `aidlc-docs/construction/infra/code/runtime-contract.md` (its 'Getting AWS access' section, added 12:45) and `infra/README.md` (its ACCESS.md pointer). Deleted the untracked `infra/ACCESS.md`, also from 12:45. Its verified content was not discarded - the setup procedure, the four checks, the expiry handling, the IAM-user impossibility finding and the two cautions were folded into `cross-account-access.md`, which is where they belong now that shared credentials IS the resolution rather than a separate topic. One overlapping document instead of two.
+
+**`.kiro/settings/mcp.json` left modified and reported rather than reverted.** It is IDE tooling config from a session earlier than either of the two being reverted, it was already deliberately excluded from commit `1310e69` as unrelated, and reverting it would remove the `aws-mcp` server this workspace uses for every AWS probe in this unit. Flagged to the user for an explicit call; it is not staged and does not enter the PR either way.
+
+Re-simplified the `.env-example` comment: the previous draft warned against pointing the value at `643922457910` from another account, which is now the opposite of the procedure. It now says the name is account-specific, comes from the `DdbTableName` stack output, and points at the credentials setup.
+
+Verification: `tsc --noEmit` clean, 5/5 template assertions pass, no infrastructure change. Committing and pushing to `construction/infra`, then posting the resolution as a PR #6 comment."
+**Context**: CONSTRUCTION - INFRA response to PR #6. Resolution is shared credentials. Other-session diffs reverted; mcp.json flagged.
+
+---
+## Construction - PR #6 Reply Posted, Duplicate Comment Removed
+**Timestamp**: 2026-08-20T14:00:00Z
+**User Input**: "N/A - executing the approved push/PR-comment request"
+**AI Response**: "Committed as `211e4a9` on `construction/infra` and pushed. Three files staged by name - `.env-example`, `aidlc-docs/audit.md`, `aidlc-docs/construction/infra/code/cross-account-access.md`. `.kiro/settings/mcp.json` deliberately not staged.
+
+Pre-commit checks: scanned the staged files for AWS access-key, session-token and Friendli key patterns with no matches; re-confirmed `.env` is gitignored via `git check-ignore` without opening it; `tsc --noEmit` clean and 5/5 template assertions passing.
+
+Posted the resolution as a comment on PR #6. **Posted it twice by accident and removed the duplicate.** The first `gh pr comment` invocation was piped through `tail -3`, which discarded the returned URL and surfaced the pipeline's exit code as 1, so it read as a failure when it had in fact succeeded. Retrying created a second identical comment. Detected it by re-reading the comment list rather than trusting the exit codes, then deleted `5356565282` via the issues-comments API and verified three comments remain: INFRA 12:37, BE 13:17, and this reply at 13:29. Recording the cause because the lesson generalises - piping a command whose exit code matters hides that exit code, and for a non-idempotent action like posting a comment that turns a false failure into a duplicate.
+
+Comment content: option 2 confirmed with credentials to be shared by DM and the mandatory `prompthon` profile name; the SCP explicit-deny evidence for why option 1's resource-policy form is unavailable; why the assumable-role form widens into option 2 anyway; confirmation that BE was not misconfigured, with the account-scoped-table-name explanation; the four verification checks with observed values; the two costs of sharing and why per-person IAM users are not an alternative; option 3 retained as the last mile with the reason local access cannot cover it; and the `.env-example` defect disclosed as INFRA's own."
+**Context**: CONSTRUCTION - INFRA delivered. `211e4a9` pushed, PR #6 reply posted, duplicate removed.
+
+---
