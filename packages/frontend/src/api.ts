@@ -96,15 +96,23 @@ interface BeDeviceState {
   updatedAt: string;
 }
 
+interface BeBilingual {
+  ko: string;
+  en: string;
+}
+
+/**
+ * FE-facing shape only - `content` (the full analysis) never leaves BE over
+ * REST (construction/be, PR #7 follow-up). `title`/`summary` are the only
+ * fields the compendium shows, one language picked at read time.
+ */
 interface BeSkillSummary {
   id: string;
   productId: ProductId;
-  title: string;
+  title: BeBilingual;
+  kind: 'buff' | 'action';
+  summary: BeBilingual;
   createdAt: string;
-}
-
-interface BeSkillRecord extends BeSkillSummary {
-  content: string;
 }
 
 interface BeFailure {
@@ -142,13 +150,14 @@ function toDeviceStats(state: BeDeviceState): DeviceStats {
  * skill it returns is presented uniformly rather than guessed at. Revisit once
  * BE distinguishes them.
  */
-function toSkill(record: BeSkillRecord): Skill {
+function toSkill(record: BeSkillSummary, lang: Lang): Skill {
   return {
     id: record.id,
     characterId: record.productId,
-    name: record.title,
+    name: record.title[lang],
     tier: 'basic',
-    reason: record.content,
+    kind: record.kind,
+    reason: record.summary[lang],
     status: 'active',
     discoveredAt: record.createdAt,
     revisedAt: null,
@@ -227,14 +236,10 @@ function createHttpClient(getLang: GetLang): ApiClient {
 
     async listSkills(characterId) {
       const summaries = await unwrap<BeSkillSummary[]>(await fetch(`/api/characters/${characterId}/skills`));
-      // The list route omits `content` to keep polling cheap (BE's own comment on the
-      // route) - the compendium needs the full reason, so each summary is filled in.
-      const records = await Promise.all(
-        summaries.map(async (summary) =>
-          unwrap<BeSkillRecord>(await fetch(`/api/characters/${characterId}/skills/${summary.id}`)),
-        ),
-      );
-      return records.map(toSkill);
+      // The list already carries title/summary in both languages - no per-skill
+      // detail fetch needed now that `/skills/:id` returns the same shape (BE
+      // never sends the full analysis over REST).
+      return summaries.map((s) => toSkill(s, getLang()));
     },
 
     async sendMessage(characterId, text, skillId) {
@@ -297,19 +302,10 @@ function createHttpClient(getLang: GetLang): ApiClient {
       const announceText = (name: string): string =>
         getLang() === 'ko' ? `${name} 스킬을 새로 발견했어요!` : `I discovered a new skill: ${name}`;
 
-      const notifyDiscovery = async (productId: ProductId, summary: BeSkillSummary) => {
-        // The event only carries a summary (no `content`) - fetch the full record so the
-        // spotlight/compendium has a reason to show the moment it opens, not a blank one
-        // until the next poll.
-        let skill: Skill;
-        try {
-          const record = await unwrap<BeSkillRecord>(
-            await fetch(`/api/characters/${productId}/skills/${summary.id}`),
-          );
-          skill = toSkill(record);
-        } catch {
-          skill = toSkill({ ...summary, content: '' });
-        }
+      const notifyDiscovery = (productId: ProductId, summary: BeSkillSummary) => {
+        // The event already carries title/summary in both languages - same
+        // shape `/skills` and `/skills/:id` return, so no extra fetch needed.
+        const skill = toSkill(summary, getLang());
         const event: SkillDiscoveredEvent = {
           characterId: productId,
           skill,
@@ -338,7 +334,7 @@ function createHttpClient(getLang: GetLang): ApiClient {
           } catch {
             return; // A malformed event is not worth tearing the connection down for.
           }
-          if (event.type === 'skillDiscovered') void notifyDiscovery(productId, event.skill);
+          if (event.type === 'skillDiscovered') notifyDiscovery(productId, event.skill);
         };
 
         source.onerror = () => {

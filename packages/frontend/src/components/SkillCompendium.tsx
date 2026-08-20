@@ -14,10 +14,12 @@
  * why the tier frames below are a property of cards that exist rather than a
  * grid with gaps in it.
  *
- * FE-R-13: the reason is inline and expanded, never behind a tap, and never
- * clamped to a line count. That sentence is the evidence that converts
- * autonomous discovery from an assertion into something witnessed, and behind a
- * tap half an audience never sees it.
+ * FE-R-13, revised by user directive: the reason used to sit inline and
+ * always expanded, on the reasoning that a tap is a place half an audience
+ * never reaches. With `kind` badges added, cards read fine collapsed too, so
+ * every card now opens collapsed and a tap toggles its reason - a second
+ * directive dropped the "newest skill starts expanded" exception, so first
+ * viewing and every later viewing behave the same way.
  *
  * FE-R-12: tier is still distinguishable at a glance via the card's own frame
  * (`data-tier` below) - the separate text label ("기본"/"고급") that used to sit
@@ -25,6 +27,10 @@
  * part of that same frame, not a reintroduction of the label: a faceted
  * gem, not a word, and `aria-hidden` for the same reason the frame colour
  * itself carries no accessible text.
+ *
+ * `kind` (buff/action) gets both a badge and the card's own left-accent
+ * colour (`data-kind` below) - color-coded even before the badge text is
+ * read, same pattern `data-tier` already used for the advanced-tier frame.
  *
  * Cards animate in staggered by list position (`--i`, from `index` below) so
  * opening the dex reads as a collection revealing itself rather than a list
@@ -35,7 +41,7 @@
  * is evidence that feedback changed the skill rather than replacing it.
  */
 
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import type { Lang, Skill } from '@prompthon/shared';
 import type { translator } from '../strings';
 
@@ -44,11 +50,9 @@ interface Props {
   lang: Lang;
   t: ReturnType<typeof translator>;
   onClose: () => void;
-  onInvoke: (skillId: string) => void;
-  onStartFeedback: (skillId: string) => void;
 }
 
-export function SkillCompendium({ skills, lang, t, onClose, onInvoke, onStartFeedback }: Props) {
+export function SkillCompendium({ skills, lang, t, onClose }: Props) {
   return (
     <div className="sheet-layer" data-testid="compendium-layer">
       <button
@@ -84,15 +88,7 @@ export function SkillCompendium({ skills, lang, t, onClose, onInvoke, onStartFee
           ) : (
             <ul className="skill-list">
               {skills.map((skill, index) => (
-                <SkillCard
-                  key={skill.id}
-                  skill={skill}
-                  index={index}
-                  lang={lang}
-                  t={t}
-                  onInvoke={onInvoke}
-                  onStartFeedback={onStartFeedback}
-                />
+                <SkillCard key={skill.id} skill={skill} index={index} lang={lang} t={t} />
               ))}
             </ul>
           )}
@@ -112,16 +108,13 @@ function SkillCard({
   index,
   lang,
   t,
-  onInvoke,
-  onStartFeedback,
 }: {
   skill: Skill;
   index: number;
   lang: Lang;
   t: ReturnType<typeof translator>;
-  onInvoke: (skillId: string) => void;
-  onStartFeedback: (skillId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const discovered = new Date(skill.discoveredAt).toLocaleDateString(
     lang === 'ko' ? 'ko-KR' : 'en-US',
   );
@@ -130,19 +123,38 @@ function SkillCard({
     <li
       className="skill-card"
       data-tier={skill.tier}
+      data-kind={skill.kind}
       data-testid="skill-card"
       style={{ '--i': index } as CSSProperties}
     >
-      <div className="skill-card-head">
+      <button
+        type="button"
+        className="skill-card-head"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        data-testid="skill-card-toggle"
+      >
         <span className="skill-tier-mark" aria-hidden="true" />
         {/* Skill names stay in the language they were generated in (US-4.2). */}
         <span className="skill-name">{skill.name}</span>
-      </div>
+        <span className={`skill-kind-badge skill-kind-${skill.kind}`} data-testid="skill-kind-badge">
+          {skill.kind === 'buff' ? t('skill.kind.buff') : t('skill.kind.action')}
+        </span>
+        <span className={`skill-card-chevron${expanded ? ' skill-card-chevron-open' : ''}`} aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+      </button>
 
-      {/* FE-R-13. Agent-authored summary, never raw provenance (FR-5.11). */}
-      <p className="skill-reason" data-testid="skill-reason">
-        {skill.reason}
-      </p>
+      {/* FE-R-13's "always expanded" narrowed by user directive to "collapsed
+          until tapped" - agent-authored summary either way, never raw
+          provenance (FR-5.11). */}
+      {expanded ? (
+        <p className="skill-reason" data-testid="skill-reason">
+          {skill.reason}
+        </p>
+      ) : null}
 
       <div className="skill-card-meta">
         <span className="tnum">{discovered}</span>
@@ -151,30 +163,6 @@ function SkillCard({
             {t('skill.revised')}
           </span>
         ) : null}
-      </div>
-
-      <div className="skill-card-actions">
-        {/* FE-R-31: by id, never by name. Naming a skill by speech is the fragile
-            path on stage. */}
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => onInvoke(skill.id)}
-          data-testid="skill-invoke-button"
-        >
-          {t('skill.invoke')}
-        </button>
-
-        {/* Q6 D: closes the sheet, focuses the input, binds this skill. The judge
-            taps once and says one sentence. */}
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => onStartFeedback(skill.id)}
-          data-testid="skill-talk-button"
-        >
-          {t('skill.talk')}
-        </button>
       </div>
     </li>
   );

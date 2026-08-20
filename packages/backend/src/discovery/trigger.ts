@@ -1,4 +1,4 @@
-import type { ProductId } from "@prompthon/shared";
+import type { Bilingual, ProductId } from "@prompthon/shared";
 import { runDiscoveryGraph } from "./graph.js";
 import { countSinceLastRun, resetSinceLastRun } from "../data/usage.js";
 
@@ -15,7 +15,7 @@ export function maybeRunDiscovery(productId: ProductId): void {
   runDiscoveryGraph(productId)
     .then(({ found, title }) => {
       console.log(
-        `[discovery-trigger] ${productId}: ${found ? `found: ${title}` : "no pattern found"}`,
+        `[discovery-trigger] ${productId}: ${found ? `found: ${title?.en}` : "no pattern found"}`,
       );
     })
     .catch((err: unknown) => {
@@ -34,7 +34,7 @@ export function maybeRunDiscovery(productId: ProductId): void {
  * reset as the threshold-triggered path - `null` means a run for this
  * product is already in progress, not a failure.
  */
-export function forceRunDiscovery(productId: ProductId): Promise<{ found: boolean; title?: string }> | null {
+export function forceRunDiscovery(productId: ProductId): Promise<{ found: boolean; title?: Bilingual }> | null {
   if (inFlight.has(productId)) return null;
   inFlight.add(productId);
 

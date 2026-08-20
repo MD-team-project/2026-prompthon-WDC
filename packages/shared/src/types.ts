@@ -60,12 +60,20 @@ export type SkillTier = 'basic' | 'advanced';
 
 export type SkillStatus = 'active' | 'retired';
 
+/**
+ * Game-skill-style classification: `buff` activates automatically under a
+ * condition (context-correlated - e.g. weather), `action` is a fixed routine
+ * run on command (plain recurring, no condition).
+ */
+export type SkillKind = 'buff' | 'action';
+
 export interface Skill {
   id: string;
   characterId: string;
   /** Stays in the language it was generated in. US-4.2 scenario 3. */
   name: string;
   tier: SkillTier;
+  kind: SkillKind;
   /** Agent-authored summary of what motivated the skill. Not raw provenance. */
   reason: string;
   status: SkillStatus;

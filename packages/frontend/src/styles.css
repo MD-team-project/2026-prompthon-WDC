@@ -1732,6 +1732,27 @@ svg {
   background: var(--product);
 }
 
+/* Kind sets the card's own accent - readable before the badge text is, same
+   gold-vs-product-accent split as the badge (buff = conditional/rarity
+   territory, action = this device's own routine). Wins over the tier-based
+   accent above: tier is not yet a real BE distinction (always "basic" today),
+   kind is. */
+.skill-card[data-kind='buff'] {
+  border-color: color-mix(in srgb, var(--gold) 55%, var(--ink) 12%);
+}
+
+.skill-card[data-kind='buff']::before {
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+}
+
+.skill-card[data-kind='action'] {
+  border-color: color-mix(in srgb, var(--product) 45%, var(--ink) 15%);
+}
+
+.skill-card[data-kind='action']::before {
+  background: var(--product);
+}
+
 /* A single foil-style light pass once the card has settled - the advanced
    tier catching the light once, not a looping shimmer that would compete
    with the reason text for attention. */
@@ -1756,6 +1777,37 @@ svg {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.skill-card-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--text-mute);
+  transition: transform 0.15s ease-out;
+}
+
+.skill-card-chevron svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.skill-card-chevron-open {
+  transform: rotate(180deg);
 }
 
 /* Part of FE-R-12's frame, not the text label it replaced: a faceted gem,
@@ -1780,6 +1832,29 @@ svg {
 .skill-name {
   font-size: 14.5px;
   font-weight: 600;
+}
+
+/* Buff = a gold/rarity tint (conditional trait, "game stat" territory).
+   Action = the product's own accent (a routine that belongs to this device). */
+.skill-kind-badge {
+  margin-left: auto;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--ink-soft);
+  white-space: nowrap;
+}
+
+.skill-kind-buff {
+  background: color-mix(in srgb, var(--gold) 22%, transparent);
+  color: var(--gold-ink);
+}
+
+.skill-kind-action {
+  background: var(--tint);
+  color: var(--product-ink);
 }
 
 /* FE-R-13: always visible, expanded, never clamped. This sentence is the
