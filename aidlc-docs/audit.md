@@ -987,3 +987,166 @@ Committing all INCEPTION artifacts and opening a PR for merge as requested."
 
 ---
 
+## CONSTRUCTION - BE Functional Design Started
+**Timestamp**: 2026-08-20T07:52:18Z
+**User Input**: "AI-DLC Construction, BE 유닛 담당. Functional Design부터 시작"
+**AI Response**: "Started CONSTRUCTION for unit BE. Created branch `construction/be` off main and the directories `aidlc-docs/construction/plans` and `aidlc-docs/construction/be/functional-design`.
+
+Loaded construction/functional-design.md and the Inception context: application-design.md, unit-of-work.md, unit-of-work-story-map.md. Confirmed BE scope - three agents in 1:1:1 binding, Skill Discovery, skill lifecycle, REST plus SSE API, and device-stub. BE is primary on US-1.1, US-3.1, US-3.2, US-3.3 and US-3.4, contributing on the other four.
+
+Executed Steps 1 through 4 and created aidlc-docs/construction/plans/be-functional-design-plan.md.
+
+Wrote an explicit scope section separating what this stage decides from what it does not, because two categories of deferral now apply and conflating them would undo decisions made in Inception. Not in scope: real product capability vocabularies, attribute keys, authentic usage rhythms and the device time model, all deferred to the per-product phase; and route paths, payload shapes, SSE event names and storage keys, which are settled with FE directly under the interface evolution policy. Stated the distinction that governs the questions - placeholder vocabulary is in scope, authentic vocabulary is not, because the scaffolding needs something to compose skills over but does not need the real thing.
+
+Generated 7 questions, deliberately fewer than earlier stages given the repeated over-specification findings, each covering something BE genuinely must decide to build the scaffolding:
+
+Q1 skill structure, recommending an ordered step list plus one trigger with no conditionals, on the grounds that it matches what discovery can realistically generate and what a demo can show. Q2 trigger vocabulary, recommending three kinds and noting that dropping `afterEvent` would lose the more impressive discovery. Q3 discovery threshold, recommending 3 to 5 new events since it must be crossable within a few demo interactions, which is the point of the mechanic. Q4 progression arithmetic, recommending level equals discovered-skill count with exp as a cosmetic bar, because it makes FR-2.4's causality exact and needs no threshold tuning. Q5 revision semantics, recommending targeted patch mutation since US-3.4 requires identity and history to survive. Q6 output per run, recommending at most one skill because one announcement is legible on stage and keeps the level-up mapping one-to-one. Q7 placeholder device vocabulary, recommending generic product-neutral capabilities and flagging that product-flavoured guesses would invent product decisions Inception deliberately deferred.
+
+Checklist covers the three mandatory artifacts, omits frontend-components since BE has no UI, and adds two verification items: that every BE-primary story maps to testable rules, and that the FR-5.5 and FR-5.11 invariants appear as explicit rules rather than assumptions.
+
+Also restated the dedicated-endpoint tool-calling check, noting it is the only one of the four that would invalidate this design rather than affecting implementation detail.
+
+Now at Step 5, awaiting answers."
+**Context**: CONSTRUCTION - BE Functional Design. Plan created on branch construction/be, awaiting answers to 7 questions.
+
+---
+
+## BE Functional Design - Skill redefined as a Markdown document
+**Timestamp**: 2026-08-20T08:04:36Z
+**User Input**: "스킬 구조, md 파일로 사용자의 현재 제품 사용 데이터를 분석한 결과를 토대로 새로운 기능이나 모드를 describe. 어떠한 순서 있는 Step 목록이나 트리거는 설명 필요"
+then "다만 md file로 local 저장 대신, dynamo DB에 그냥 심플하게 저장 및 관리"
+**AI Response**: "Recorded Q1 as X. All three options I had offered were wrong - each assumed a machine-executable composition, and the answer is that a skill is a prose document.
+
+Definition recorded: a discovered skill is a Markdown document in which the agent DESCRIBES a new feature or mode, derived from analysing that product's usage data. Any step sequence and any trigger condition are described in prose inside the document rather than held as structured fields. Stored in DynamoDB as a simple string field on the skill record - not as local .md files, since nothing about Markdown implies a filesystem.
+
+FLAGGED THREE CONSEQUENCES rather than recording the answer and moving on.
+
+First and most significant: FR-3.4's mechanism relocates. That requirement demanded generated skills reference only existing capabilities so nothing hallucinated could reach a device call, and it was enforced by validating a composition against the enumerated vocabulary. A prose document cannot be validated that way. But the guarantee survives by moving: execution now happens via the Bedrock control agent reading the document and acting on it, and that agent can only call tools it actually has - so an impossible description yields an agent saying it cannot do that, rather than a broken device call. Bounded by the tool set at execution time instead of by validation at generation time. Noted this must be stated explicitly in business-rules.md because the requirement text still describes the old mechanism.
+
+Second: US-3.3 'use a skill' now means feeding the document to the control agent as instruction and letting it resolve tool calls. This reuses the existing control path rather than adding an execution engine.
+
+Third: nothing fires automatically, since a prose trigger gives a scheduler nothing to read. Skills become proposals the user reads and invokes. Consistent with scaffolding scope, and US-3.4's revise-and-retire loop is unaffected - but flagged because the word 'trigger' in the requirements implied automatic firing.
+
+CASCADED the change through three other questions rather than leaving them stale. Q2 WITHDRAWN, since it enumerated structured trigger kinds that no longer exist, and replaced with Q2b asking how much structure the skill record keeps outside the Markdown - recommending minimal fields with a warning that lifting the trigger and step count into fields would reintroduce the two-representations-drift problem this change removes. Q5 REVISED, since its options assumed structured fields to patch; now asks how the document changes, recommending full rewrite of the same record with identity and history preserved outside `content`. Q7 annotated to note the capability vocabulary is no longer a validation bound on discovery but still matters as the control agent's tool set, which is now what bounds execution.
+
+Outstanding: Q2b, Q3, Q4, Q5, Q6, Q7."
+**Context**: CONSTRUCTION - BE Functional Design. Skill redefined as prose document. FR-3.4 mechanism relocated to execution-time tool bounding.
+
+---
+
+## BE Functional Design - Q2b and Q3 answered, discovery observability added
+**Timestamp**: 2026-08-20T08:12:49Z and 2026-08-20T08:21:07Z
+**User Input**: "Q2b A." then "Q3 더 자세히 뭐가 궁금한지 설명. 그리고 질문 한번에 나열하지말고 하나씩 묻고 응답하고 -> 다음 질문 순서로 진행" then "N값 A" and "데모르 위해서라면 2~3번의 interaction 이후 skill discovery 동작을 뒤에서 log로 보여주고 UI/UX에서 발견이 가능해야함"
+**AI Response**: "Q2b = A recorded: minimal skill record of id, productId, title, content, status, createdAt, with everything else inside the Markdown. Noted D was declined, avoiding two drifting representations.
+
+FLAGGED a consequence of Q2b the answer did not mention: with no separate `provenance` field there is nothing to strip from responses, and the reasoning now lives inside `content` which does cross to the client. FR-5.11 therefore relocates to a GENERATION-TIME constraint - EXAONE must write the document at a level of detail safe to show the user, describing the pattern it noticed rather than dumping the event log. Recorded as needing an explicit rule in business-rules.md.
+
+Adopted the one-question-at-a-time convention at user request and recorded it in the plan so it survives context loss.
+
+Explained Q3 properly rather than restating options: what the mechanism is, and the three things it actually needs - the threshold value, concurrency behaviour when the threshold is re-crossed mid-run, and whether the counter resets after a run that finds nothing. Identified the third as the one that matters most, since resetting means long silence in thin stretches while not resetting burns an EXAONE call per subsequent event. Also surfaced a wrinkle none of the options covered: the seeded fixture has no prior run, so every seeded event counts as new and any threshold is crossed on first boot.
+
+Q3 = A recorded, threshold pinned at 3 new events so 2-3 interactions cross it, and noted this is now a DEMO REQUIREMENT rather than a tuning preference. Applied three sub-decisions as defaults rather than blocking on BE internals - ignore re-crossing during a run, reset the counter after an empty run, and allow the fixture to fire on first boot since the character having already studied your history is a free demo opening - and invited correction.
+
+RECORDED A GENUINE NEW REQUIREMENT from the second half of the answer: the discovery run must be visible as a log while it happens, and the discovery must be findable in the UI. Noted this crosses the FE/BE boundary so it joins the list they agree directly. Shape: discovery emits progress events over the existing SSE channel through its phases, FE renders them as a visible log.
+
+Explained why this matters more than it appears: discovery is background and was therefore invisible while running, so a user saw nothing and then a skill appeared - and on stage eight seconds of nothing is indistinguishable from broken. A progress log converts dead air into the character visibly working.
+
+Recorded three consequences. First, this is the payoff for thinking mode - I had parked an idea about showing EXAONE's reasoning as the character studying usage, and this request is that idea; the Inception constraint forbids thinking output rendering as the character's SPEECH, and a diagnostic log is not speech, so it is permitted and is the most interesting content the log can carry. Second, EXAONE failure stops being invisible, reversing a property earlier documents listed as a safety benefit - the right trade, because silence was only safe while nothing was expected to appear, and once a log runs silence reads as broken. Third, the log must be visually distinct from the character's messages or the character appears to narrate its own internals."
+**Context**: CONSTRUCTION - BE Functional Design. Q2b and Q3 answered. Discovery observability is a new cross-owner requirement. Outstanding: Q4, Q5, Q6, Q7.
+
+---
+
+## BE Functional Design - Redirected to structural questions, S1 answered
+**Timestamp**: 2026-08-20T08:41:19Z and 2026-08-20T08:47:52Z
+**User Input**: "아 질문 point들이 전부 off, 내가 원하는건 일단 code structure를 구성하고 난 이후에 현재 질문들을 하나씩 대답하며 state, tool, middleware 등을 추가할거지 벌써부터 이걸 다 정할 생각없음. Ask a structural question like langchain, which class, library to add etc."
+then "A로"
+**AI Response**: "User is right. I was asking domain-modelling questions - what a skill is, how revision works, how progression is calculated - which is Functional Design's usual territory and the wrong thing to ask first here. What is wanted is the code structure first, with state, tools and middleware added one question at a time as construction proceeds.
+
+Recorded the redirect in the plan as section 2A. PARKED rather than withdrew Q5, Q6 and Q7 - how feedback revises a document, how many skills per run, and the placeholder capability vocabulary are all real decisions, but they belong to the moment the corresponding code is written rather than to a guess made now. Q1 through Q4 stay answered since they shaped what the structure must hold.
+
+Also recorded Q4 as OUT OF BE SCOPE from the previous exchange, on the user's instruction that progression is FE's concern and BE only needs to notify FE on discovery. Noted this removes the `Character` entity from BE's domain model entirely - no level, no exp, no progression state - and that it works out cleanly rather than merely being a handoff: level is derivable from the skill list BE already serves and already persists, so FE computes it and NFR-2.3 is satisfied without BE storing anything, because progression survives a refresh via the skills it derives from.
+
+Opened structural questioning with S1, on agent and discovery construction, since it determines BE's identity and the rest of the structure follows from it. Offered four options and named D - createAgent for control plus a plain async function for discovery, no LangGraph - as the genuine YAGNI candidate, since a five-step pipeline with no branching does not need a graph framework.
+
+S1 = A recorded. Two abstractions: `createAgent` from `langchain` for the three Bedrock control agents, `StateGraph` from `@langchain/langgraph` for the discovery pipeline, with `@langchain/aws` for ChatBedrockConverse and `@langchain/openai` for ChatOpenAI pointed at Friendli.
+
+Recorded what tipped it away from D: the Q3 answer requires discovery to emit a per-phase progress log over SSE, and StateGraph streams node transitions natively while a plain function needs a hand-placed emit per phase. Stated honestly that the difference is small but real and points one way. Also noted createAgent stays consistent with the Inception decision that the agent needs no module of its own, being one framework call rather than a layer."
+**Context**: CONSTRUCTION - BE Functional Design, now structural. S1 answered. Q5/Q6/Q7 parked until their code is written.
+
+---
+
+## BE Functional Design - Structural questions S2 through S7
+**Timestamp**: 2026-08-20T08:55:31Z through 2026-08-20T09:31:18Z
+**User Input**: "A" (S2), "A" (S3), "A" (S4), "A" (S5), "checkpointer는 보통 state 중간 상태 저장, 이전 대화 이력 등을 위해서 사용되는데 시연을 목적으로는 Langchain In-Memory checkpointer로 커버하고, 구체적인 skill과 같이 필요한 항목은 따로 DynamoDB에서 불러와서 inject" (S6), "B" (S7)
+**AI Response**: "Six structural decisions recorded, one question at a time per the convention.
+
+S2 = Express 5, chosen over Hono despite Hono having built-in streamSSE, on the ecosystem argument that LangChain examples are overwhelmingly Express-based. Recorded the accepted cost as a four-row table of what Express will not do for SSE - stream headers, proxy-buffering prevention, client-disconnect handling, keep-alive heartbeat - noting all four fail QUIETLY, and that a silent SSE death stops both announcements and the Q3 progress log with no error anywhere, which on stage is indistinguishable from discovery being broken. Recommended one helper rather than per-route handling.
+
+S3 = concern-based flat structure with nine directories. Recorded why over the minimal no-folders alternative: this project has two boundaries to keep, FR-5.5 and FR-5.11, and folders make them checkable by looking - specifically 'no Bedrock tool reaches usage history' becomes a question about what `tools/` imports from `data/`. Noted vertical slices will be right later, during the per-product phase, but that right now there are only three slices and shared would hold most of the code.
+
+S4 = tsx for dev, tsc for build. Rejected Node native type stripping because its behaviour varies across versions and three people on different local Node versions produces a failure hitting one person only, discovered at an integration checkpoint. Stated the trap in tsx explicitly - it strips types without checking, so the server starts even when types are wrong - and recorded tsc --noEmit as a separate script to run before integration checkpoints.
+
+S5 = device-stub as a separate process on its own port. Recorded why the cost is earned: FR-5.5 guarantees the agent forwards device state rather than authoring it, and in a separate process there is no other way to do it since the state object is not in the agent's memory, whereas same-process leaves a state object reachable by a rushed shortcut - the exact failure FR-5.5 exists to prevent, and consistent with the earlier finding that single-process boundaries decay under time pressure. Second benefit noted for a parallel team: fewer merge conflicts across three branches.
+
+S6 = three agents at boot, module level, plus the user's state architecture. In-memory checkpointer for message history and intermediate state; skills and durable items read from DynamoDB and injected at invoke time. Noted C was unavailable regardless of convenience since FR-5.4 forbids one agent handling three devices. Named a property the split removes rather than solves: skills living only in DynamoDB and read fresh each invoke means there is NO CACHE TO INVALIDATE between the discovery pipeline and the control agent - if skills were held in checkpointer state, a background write would have to reach into three live agent states, and getting that wrong would mean a character not knowing about a skill it had just announced.
+
+S7 = skills exposed as tools, listSkills and getSkill, no skill content in the system prompt. Recorded the failure mode to design against: the model must DECIDE to call listSkills, and if a user names a skill and the model does not look, the character denies knowing it while the skill sits in the database - which on stage reads as the product forgetting what it just announced, with an invisible cause. Gave two cheap mitigations belonging to prompt work rather than structure: the system prompt stating that discovered skills exist and are reachable, without listing them; and tool descriptions carrying their own weight. Noted the slash-command path from Q5 bypasses tool selection entirely by resolving the named skill directly, which is why it was recorded as the reliable path for stage use."
+**Context**: CONSTRUCTION - BE Functional Design. S1-S7 answered. Structure settled enough to generate artifacts.
+
+---
+
+## BE Functional Design Closed, Code Generation Plan Created
+**Timestamp**: 2026-08-20T09:41:52Z
+**User Input**: "B"
+**AI Response**: "Closed BE Functional Design on the structural decisions rather than generating the three domain artifacts. The reason is that domain specifics were deliberately parked to be decided against real code, so business-logic-model.md, business-rules.md and domain-entities.md would have been thin restatements of decisions already recorded. The plan file at construction/plans/be-functional-design-plan.md holds all seven structural decisions plus the four answered domain questions, so it serves as the stage artifact and no duplicate document was created.
+
+Loaded construction/code-generation.md and executed Part 1, Steps 1 through 5. Created aidlc-docs/construction/plans/be-code-generation-plan.md with 15 steps plus a Step 0.
+
+Step 0 is the first-hour verification, placed before any code because tool calling on the dedicated Friendli endpoint can invalidate S1 and S7 and require rework rather than adjustment. Instructed that if that item fails, stop rather than continue.
+
+RAISED A CROSS-UNIT COORDINATION ITEM before the steps rather than inside them: Steps 1 and 2 create repository-root files all three units need - root package.json with workspaces, tsconfig.base.json, gitignore additions. BE reaches them first because INFRA is doing IaC and FE adds only its own package. Recorded that BE creates them and the others add their packages, and that this needs announcing at merge, since a second unit inventing its own root config produces a conflict that is annoying rather than difficult.
+
+Steps 1-12 are the running skeleton: monorepo root, shared types kept deliberately thin per the interface evolution policy, device-stub with canned responses including one clamping capability so the FR-5.5 test stays exercisable, backend bootstrap, two single-site model constructions plus the thinking sanitiser written against Step 0's observation, data layer with a local substitute until INFRA's table exists, device client, the SSE helper carrying all four things Express will not do, tools with descriptions written for the S7 selection-failure mitigation, three agents with per-product checkpointers, the discovery StateGraph with node transitions forwarded to SSE as the progress log, and the routes. Steps 13-15 are tests, documentation and optional packaging.
+
+Included an FR-5.11 verification item in Step 6 stated as an inspection check - nothing in src/tools imports src/data/usage.ts - which is what the S3 folder choice was made to enable.
+
+Step 14 includes fe-integration-notes.md documenting the routes and SSE shapes BE actually built, noted as the artifact the interface evolution policy depends on, since shapes are settled between FE and BE rather than fixed in Inception.
+
+Story traceability marks stories `wired` rather than `done`, being explicit that scaffolding wires them end to end without completing them. US-4.1 voice is excluded from this plan entirely, since the Transcribe endpoint needs INFRA to grant access first.
+
+Was honest about NFR-3.1 in Step 13: property-based tests on pure functions and serialization round-trips will be small, because a scaffold has few pure functions, with threshold arithmetic and SkillRecord round-trips as the realistic targets.
+
+Updated aidlc-state.md with Functional Design complete, all seven structural decisions, the settled domain decisions including both requirement relocations, and the parked list."
+**Context**: CONSTRUCTION - BE. Functional Design complete. Code Generation Part 1 plan created, awaiting approval.
+
+---
+
+## BE Code Generation - Approval Prompt Logged
+**Timestamp**: 2026-08-20T09:41:52Z
+**Approval Prompt**: "BE code generation plan complete at aidlc-docs/construction/plans/be-code-generation-plan.md. 15 steps plus Step 0 verification. Steps 0-12 produce the running skeleton, 13-15 are tests, docs and optional packaging. Approve to begin generation, or request changes."
+**AI Response**: "Prompt logged prior to asking, per Step 6."
+**Context**: CONSTRUCTION - BE Code Generation Part 1, Step 7. Awaiting explicit approval.
+
+---
+
+## BE Code Generation Plan - SSE scope corrected, discovery notification via polling
+**Timestamp**: 2026-08-20T09:52:38Z and 2026-08-20T09:58:44Z
+**User Input**: "- Discovery emits **per-phase progress over SSE** so the run is visible while it happens. -> 진행 상황은 로그를 통해서만 보여주고 SSE는 별도로 emit X Agentic Control만 SSE emit"
+then "A"
+**AI Response**: "Corrected an over-reading of mine. The earlier request was 'skill discovery 동작을 뒤에서 log로 보여주고 UI/UX에서 발견이 가능해야함', which I read as an in-UI progress log delivered over SSE. The actual meaning is server-side logs for progress, with the discovered skill itself becoming visible in the UI. Discovery emits nothing over SSE, and SSE carries Agentic Control output only.
+
+Updated the plan: Step 8 SSE helper carries Agentic Control output only, Step 11 writes node transitions to the server log with no SSE emission, and the settled-decisions section records the correction with its date.
+
+FLAGGED that this weakens the S1 rationale rather than leaving the stale justification in place. StateGraph was chosen over a plain async function partly because it streams node transitions natively, and that argument was made when progress was destined for SSE. With progress going to logs, a plain function with five log lines does the same job. Recorded that StateGraph still stands on state management and on matching what Inception decided, but that the streaming benefit is no longer part of its case.
+
+RAISED THE BLOCKER the change created: with SSE restricted to Agentic Control, discovery cannot push anything to FE, yet US-3.2 and FR-3.6 require the character to announce a discovered skill without the user having sent anything - and discovery is background, so no request is in flight at that moment. Offered three options and was explicit about what each gives up: polling shows latency, riding the next chat turn breaks FR-3.6 outright since nothing is announced until the user speaks, and carving out one SSE event type retreats from the rule just set.
+
+Decision = A, polling. Recorded that this keeps both things the alternatives sacrificed: the announcement stays unprompted per FR-3.6, and SSE stays Agentic Control only with no exception. Cost recorded as polling latency bounded by the interval, visible on stage, which is the reason to keep the interval short.
+
+Noted BE's obligation reduces to the list route - no push, no notification endpoint, no long-poll - and that polling cadence is FE's decision. Added one implementation note for the FE integration notes: the list response should return id, title, status and createdAt WITHOUT content, so a few-second poll stays harmless and getSkill fetches the document only when a user opens one.
+
+Updated the US-3.2 traceability row accordingly."
+**Context**: CONSTRUCTION - BE Code Generation Part 1. SSE scoped to Agentic Control. Discovery notification via FE polling. Awaiting plan approval.
+
+---
+
