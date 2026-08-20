@@ -23,6 +23,7 @@ import type {
   ActionResponse,
   Character,
   ChatMessage,
+  DailyContextStats,
   DeviceStats,
   Lang,
   Progression,
@@ -55,6 +56,21 @@ export interface State {
   loadError: boolean;
   characters: Character[];
   deviceStats: Record<string, DeviceStats>;
+  /**
+   * Today's weather / movement / screen-time readings.
+   *
+   * A single value, NOT a `Record` keyed by character, and that is the whole
+   * shape of the rule: there is one user with one phone, so there is nothing to
+   * key it by. Making it per-character would allow two characters to hold
+   * different step counts for the same day, which no source could ever produce.
+   *
+   * Held in the same reducer as `deviceStats` but in a separate field, for the
+   * FE-R-1 reason: a device reading and a phone reading must never be able to
+   * end up in each other's slot.
+   */
+  dailyContext: DailyContextStats | null;
+  /** Distinguishes "still loading" from "we asked and it failed". FE-R-19. */
+  contextFailed: boolean;
   skills: Record<string, Skill[]>;
   messages: Record<string, ChatMessage[]>;
   /** Transient: drives the in-place level-up effect until it reports done. */
@@ -81,6 +97,8 @@ export type Action =
       deviceStats: DeviceStats | null;
       skills: Skill[];
     }
+  | { type: 'context/loaded'; context: DailyContextStats }
+  | { type: 'context/failed' }
   | { type: 'character/select'; characterId: string }
   | { type: 'view/back' }
   | { type: 'compendium/toggle'; open: boolean }
@@ -117,6 +135,8 @@ export function initialState(lang: Lang): State {
     loadError: false,
     characters: [],
     deviceStats: {},
+    dailyContext: null,
+    contextFailed: false,
     skills: {},
     messages: {},
     levelUp: {},
@@ -216,6 +236,16 @@ export function reducer(state: State, action: Action): State {
         skills: { ...state.skills, [action.characterId]: action.skills },
       };
     }
+
+    case 'context/loaded':
+      return { ...state, dailyContext: action.context, contextFailed: false };
+
+    case 'context/failed':
+      // Keeps whatever was already read rather than blanking the panel: a
+      // refetch that failed does not make this morning's step count untrue, and
+      // an emptied panel would read as "you didn't move today". `contextFailed`
+      // is what the panel reports if it has nothing at all yet.
+      return { ...state, contextFailed: true };
 
     case 'character/select': {
       // FE-R-29: a badge clears only when that character's screen is opened.

@@ -13,7 +13,9 @@
  *                  moves anything else on this screen, HUD included.
  *   stage-wrap     the character, flex:1. Level-up and speech happen here
  *   switcher       the other two characters, one tap away
- *   stat-panel     device state, grouped into one panel - always here
+ *   stat-stack     two panels, always here: today's readings (weather, steps,
+ *                  distance, screen time) above device state. Cause above
+ *                  effect - the day is why the character suggests a setting
  *   input-bar      voice first, text beneath
  *   + sheets       conversation log, skill compendium - raised, not routed
  *
@@ -34,12 +36,21 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { Character, ChatMessage, DeviceStats, Lang, Skill } from '@prompthon/shared';
+import type {
+  Character,
+  ChatMessage,
+  DailyContextStats,
+  DeviceStats,
+  Lang,
+  Skill,
+} from '@prompthon/shared';
+// `neighbourId` is gone with swipe navigation - switching is switcher-only now.
 import { progressRatio } from '../pure';
 import type { MicStatus } from '../state';
 import type { translator } from '../strings';
 import { CharacterStage } from './CharacterStage';
 import { CharacterSwitcher } from './CharacterSwitcher';
+import { ContextStatStrip } from './ContextStatStrip';
 import { DeviceStatStrip } from './DeviceStatStrip';
 import { InputBar } from './InputBar';
 import { SkillCompendium } from './SkillCompendium';
@@ -51,6 +62,9 @@ interface Props {
   characters: Character[];
   lang: Lang;
   deviceStats: DeviceStats | null;
+  /** Not per-character - one user, one reading. See `ContextStatStrip`. */
+  dailyContext: DailyContextStats | null;
+  contextFailed: boolean;
   messages: ChatMessage[];
   skills: Skill[];
   unseen: Record<string, number>;
@@ -241,12 +255,32 @@ export function CharacterView(props: Props) {
         </div>
       ) : null}
 
-      <DeviceStatStrip
-        deviceStats={props.deviceStats}
-        pending={props.pending}
-        lang={props.lang}
-        t={t}
-      />
+      {/*
+        Two panels, one above the other: today's readings, then the device.
+        In that order because it is the order of the reasoning - the character
+        notices the day first and proposes a setting because of it, and reading
+        the cause above the effect is what makes the suggestion legible rather
+        than arbitrary.
+
+        Wrapped rather than stacked as two siblings so the gap between them is
+        set once here, and so `.stat-panel`'s own margins stay a property of the
+        stack instead of each panel needing to know what sits next to it.
+      */}
+      <div className="stat-stack">
+        <ContextStatStrip
+          context={props.dailyContext}
+          failed={props.contextFailed}
+          lang={props.lang}
+          t={t}
+        />
+
+        <DeviceStatStrip
+          deviceStats={props.deviceStats}
+          pending={props.pending}
+          lang={props.lang}
+          t={t}
+        />
+      </div>
 
       <InputBar
         draft={props.draft}

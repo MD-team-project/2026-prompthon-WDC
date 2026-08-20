@@ -1,10 +1,13 @@
 /**
- * device-stub: a canned-response server standing in for three LG appliances.
+ * device-stub: a canned-response server standing in for three LG appliances,
+ * plus the phone-side integrations the demo pretends to have (weather, health
+ * app, screen time - see `dailyContext.ts`).
  *
  * A separate process on its own port, deliberately. The agent must ask over
  * HTTP because the state object is not in its memory - which is what makes
  * "displayed stats come from the device, not from the model" structural
- * rather than a matter of discipline.
+ * rather than a matter of discipline. Today's context is served from here for
+ * the same reason.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -12,6 +15,14 @@ import { dirname, join } from "node:path";
 import express from "express";
 import { isProductId } from "@prompthon/shared";
 import { applyCommand, capabilitiesFor, getState, makeEvent, resetState } from "./canned.js";
+import {
+  applyScenario,
+  bootScenario,
+  CONTEXT_SCENARIOS,
+  getDailyContext,
+  patchDailyContext,
+  resetDailyContext,
+} from "./dailyContext.js";
 import { enqueue, pending, startFlushLoop } from "./buffer.js";
 
 const PORT = Number(process.env.DEVICE_STUB_PORT ?? 4000);
@@ -84,8 +95,65 @@ app.post("/devices/:productId/reset", (req, res) => {
   res.json(resetState(req.params.productId as never));
 });
 
+/**
+ * Today's app-level context. NOT under /devices - it isn't an appliance and
+ * isn't product-scoped: one demo user, one reading, read by all three
+ * characters.
+ */
+app.get("/context/today", (_req, res) => {
+  res.json(getDailyContext());
+});
+
+/**
+ * Demo lever. `{ scenario: "walk" }` swaps the whole preset; any subset of
+ * `weather` / `steps` / `distanceKm` / `screenTimeMinutes` nudges individual
+ * readings. Both in one route because from the caller's side it is the same
+ * act - "make today look like this".
+ */
+app.post("/context/today", (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const { scenario, ...overrides } = body;
+
+  if (scenario !== undefined) {
+    if (typeof scenario !== "string") {
+      res.status(400).json({ failure: { code: "INVALID_REQUEST", message: "scenario must be a string" } });
+      return;
+    }
+    const applied = applyScenario(scenario);
+    if (!applied) {
+      res.status(400).json({
+        failure: {
+          code: "INVALID_REQUEST",
+          message: `unknown scenario "${scenario}". Known: ${CONTEXT_SCENARIOS.join(", ")}`,
+        },
+      });
+      return;
+    }
+    // A scenario plus overrides is honoured in that order, so `{ scenario:
+    // "walk", screenTimeMinutes: 240 }` means what it reads like.
+    if (Object.keys(overrides).length === 0) {
+      log(`context scenario -> ${scenario}`);
+      res.json(applied);
+      return;
+    }
+  }
+
+  const result = patchDailyContext(overrides);
+  if ("error" in result) {
+    res.status(400).json({ failure: { code: "INVALID_REQUEST", message: result.error } });
+    return;
+  }
+  log(`context updated -> ${JSON.stringify(result.context)}`);
+  res.json(result.context);
+});
+
+/** Back to the preset this process booted with. Device state untouched. */
+app.post("/context/reset", (_req, res) => {
+  res.json(resetDailyContext());
+});
+
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, pendingEvents: pending() });
+  res.json({ ok: true, pendingEvents: pending(), contextScenario: bootScenario });
 });
 
 /**
@@ -172,6 +240,7 @@ async function seedFixturesOnBoot(): Promise<void> {
 app.listen(PORT, () => {
   log(`listening on ${PORT}`);
   log(`flushing to ${FLUSH_URL} every ${FLUSH_INTERVAL_MS}ms`);
+  log(`today's context: ${JSON.stringify(getDailyContext())}`);
   startFlushLoop({ url: FLUSH_URL, intervalMs: FLUSH_INTERVAL_MS, log });
   void seedFixturesOnBoot();
 });

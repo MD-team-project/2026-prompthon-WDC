@@ -1157,7 +1157,18 @@ svg {
   box-shadow: 0 0 0 2px var(--bg);
 }
 
-/* --- device state, grouped into one panel --- */
+/* --- today's readings and device state, one panel each --- */
+
+/* The stack owns the outer margin and the gap between the two panels, so
+   neither panel has to know what sits next to it. */
+.stat-stack {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 18px 12px;
+  min-width: 0;
+}
 
 .stat-panel {
   flex: none;
@@ -1170,6 +1181,36 @@ svg {
   border-radius: 14px;
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   box-shadow: 0 2px 0 var(--ink-soft);
+}
+
+.stat-stack > .stat-panel {
+  margin: 0;
+}
+
+/*
+ * Today's readings, visually the quieter of the two: a thinner border and a
+ * flatter background. Not decoration - the device panel is the one whose values
+ * were reported back by the appliance, and it should be the one that looks
+ * authoritative. This panel is context the character reasoned FROM.
+ */
+.stat-panel-context {
+  border-width: 1.5px;
+  border-color: var(--line-2);
+  box-shadow: none;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  padding: 8px 12px;
+}
+
+.stat-panel-context .stat-chip {
+  box-shadow: none;
+  padding: 6px 10px;
+  background: color-mix(in srgb, #fff 88%, transparent);
+}
+
+/* Decorative, and sized so a missing emoji glyph leaves no gap worth noticing. */
+.stat-glyph {
+  margin-right: 4px;
+  font-size: 11px;
 }
 
 .stat-panel-header {

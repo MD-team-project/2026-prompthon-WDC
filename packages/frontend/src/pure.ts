@@ -134,3 +134,62 @@ export function humanizeKey(key: string): string {
 export function resolveLabel(key: string, labels: Record<string, string>): string {
   return labels[key] ?? humanizeKey(key);
 }
+
+// ---------------------------------------------------------------------------
+// Daily-context formatting. The numeric half only - the language-dependent
+// half lives in `strings.ts`, same split as `resolveLabel`/`attributeLabel`.
+//
+// These matter more than their size suggests: today's figures are the REASON
+// the character gives for a recommendation, and a reason the user has to squint
+// at is not doing its job. `14260` and `14,260 걸음` are the same datum and
+// only one of them reads as a day's walking.
+// ---------------------------------------------------------------------------
+
+/**
+ * Thousands separators, written out rather than delegated to
+ * `toLocaleString()`.
+ *
+ * The locale version would put the browser's locale in charge of a value FE
+ * formats itself for a chosen `lang`, so ko/en could disagree with each other
+ * on the same machine for reasons neither the code nor a test can see.
+ *
+ * Non-finite input returns "-": a step count that failed to arrive should read
+ * as absent, not as "NaN".
+ */
+export function groupThousands(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  const rounded = Math.round(Math.abs(value));
+  const sign = value < 0 ? '-' : '';
+  const digits = String(rounded);
+  let grouped = '';
+  for (let i = 0; i < digits.length; i++) {
+    // Comma before every digit whose distance from the end is a multiple of 3.
+    if (i > 0 && (digits.length - i) % 3 === 0) grouped += ',';
+    grouped += digits[i];
+  }
+  return sign + grouped;
+}
+
+/** One decimal place, as a string, so "5.0" keeps its zero instead of becoming "5". */
+export function toTenth(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  return (Math.round(value * 10) / 10).toFixed(1);
+}
+
+/**
+ * Minutes into hours and minutes, for screen time.
+ *
+ * Kept separate from the wording so the arithmetic is testable without a
+ * language: 194 -> { hours: 3, minutes: 14 } is true in both.
+ *
+ * Negative or non-finite input collapses to zero rather than producing a
+ * negative hour count - there is no reading this display could give for "minus
+ * two hours of phone use" that is better than "0분".
+ */
+export function splitDuration(totalMinutes: number): { hours: number; minutes: number } {
+  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) {
+    return { hours: 0, minutes: 0 };
+  }
+  const whole = Math.round(totalMinutes);
+  return { hours: Math.floor(whole / 60), minutes: whole % 60 };
+}

@@ -32,17 +32,24 @@
  *      FE's original mock contract so it starts working the moment BE adds it,
  *      but it is unreachable today because the mic is forced to `unavailable`
  *      in real-API mode (see `App.tsx`).
+ *
+ * `getTodayContext` is NOT in that list: `/api/context/today` is a real route
+ * that really returns data, and it is the one thing here that is not
+ * per-character - one user, one reading, deliberately outside
+ * `/api/characters/:productId` on BE's side too.
  */
 
 import type {
   ActionResponse,
   Character,
   ChatMessage,
+  DailyContextStats,
   DeviceStats,
   Lang,
   ProductId,
   Skill,
   SkillDiscoveredEvent,
+  WeatherCondition,
 } from '@prompthon/shared';
 import { CHARACTER_DEFAULTS } from './characters';
 import { createMockClient } from './mock';
@@ -51,6 +58,12 @@ export interface ApiClient {
   listCharacters(): Promise<Character[]>;
   /** `null` when there is nothing to report yet - see the class-level note. */
   getDeviceState(characterId: string): Promise<DeviceStats | null>;
+  /**
+   * Today's weather / movement / screen-time readings. Takes no characterId:
+   * one user, one reading, shared by all three characters - BE serves it from
+   * `/api/context/today`, outside the per-product routes, for that reason.
+   */
+  getTodayContext(): Promise<DailyContextStats>;
   listSkills(characterId: string): Promise<Skill[]>;
   /** `onToken` fires with each chunk of the reply as BE streams it, before the returned promise settles. */
   sendMessage(
@@ -102,6 +115,20 @@ interface BeDeviceState {
   updatedAt: string;
 }
 
+/**
+ * `GET /api/context/today`. BE passes device-stub's reading through verbatim,
+ * so this is the stub's shape. `date` is carried on the wire but not rendered -
+ * the panel is titled "today" and repeating the date in it would be noise.
+ */
+interface BeDailyContext {
+  date: string;
+  weather: WeatherCondition;
+  steps: number;
+  distanceKm: number;
+  screenTimeMinutes: number;
+  observedAt: string;
+}
+
 interface BeBilingual {
   ko: string;
   en: string;
@@ -149,6 +176,22 @@ function toDeviceStats(state: BeDeviceState): DeviceStats {
     attributes.push({ key, value: value as string | number | boolean });
   }
   return { characterId: state.productId, attributes, observedAt: state.updatedAt };
+}
+
+/**
+ * Drops `date` and keeps the four readings plus `observedAt`. Nothing is
+ * computed, rounded or unit-converted here - the panel formats for display, and
+ * doing it at the boundary instead would mean the value FE holds is no longer
+ * the value BE reported.
+ */
+function toDailyContext(body: BeDailyContext): DailyContextStats {
+  return {
+    weather: body.weather,
+    steps: body.steps,
+    distanceKm: body.distanceKm,
+    screenTimeMinutes: body.screenTimeMinutes,
+    observedAt: body.observedAt,
+  };
 }
 
 /**
@@ -242,6 +285,10 @@ function createHttpClient(getLang: GetLang): ApiClient {
 
     async getDeviceState() {
       return null;
+    },
+
+    async getTodayContext() {
+      return toDailyContext(await unwrap<BeDailyContext>(await fetch('/api/context/today')));
     },
 
     async listSkills(characterId) {

@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { AppContextEvent, Bilingual, ProductId, UsageEvent } from "@prompthon/shared";
 import { exaoneReasoning, extractReasoning } from "../models/exaone.js";
 import { readWindow } from "../data/usage.js";
-import { readContextWindow } from "../data/appContext.js";
+import { readContextWindow, withToday } from "../data/appContext.js";
+import { deviceAdapter } from "../device/adapter.js";
 import { putSkill } from "../data/skills.js";
 import { publish } from "../routes/sse.js";
 
@@ -56,13 +57,13 @@ function joinByDate(events: UsageEvent[], context: AppContextEvent[]): JoinedDay
 function buildPrompt(days: JoinedDay[]): string {
   return `You are looking at up to 60 days of data for an LG product, to spot a genuine recurring pattern worth turning into a described "skill" for the product's character to remember.
 
-Each entry below is one calendar day: that day's app-level context if known (distance traveled, weather, screen time) and the device settings the user chose that day, if any.
+Each entry below is one calendar day: that day's app-level context if known (weather, step count, distance travelled, phone screen time) and the device settings the user chose that day, if any.
 
 Days (JSON):
 ${JSON.stringify(days)}
 
 Look for ONE clear, recurring pattern. Two kinds count:
-1. A context-correlated pattern - the user consistently chooses different device settings depending on that day's context (e.g. a different massage zone or intensity on rainy days versus clear days, or different settings depending on distance traveled or screen time). This kind becomes a "buff": a passive trait that activates automatically under a condition, like a weather-triggered buff in a game.
+1. A context-correlated pattern - the user consistently chooses different device settings depending on that day's context (e.g. a different massage zone or intensity on rainy days versus clear days, or different settings on days they walked a lot versus days they spent hours on their phone). This kind becomes a "buff": a passive trait that activates automatically under a condition, like a weather-triggered buff in a game.
 2. A plain recurring pattern - the user chooses the same device settings on most days regardless of context (context may be missing or irrelevant). This kind becomes an "action": a fixed routine the character can perform on command, like a skill you actively cast.
 
 Prefer a context-correlated pattern (buff) if the data genuinely supports one - it is the more specific, more interesting finding. Only report a plain recurring pattern (action) if no context correlation holds up under the data.
@@ -128,7 +129,19 @@ const graph = new StateGraph(DiscoveryState)
     console.log(`[discovery:${state.productId}] loadWindow`);
     publish(state.productId, { type: "discoveryProgress", productId: state.productId, phase: "started" });
     const events = readWindow(state.productId, 60);
-    const context = readContextWindow(60);
+
+    // Today's live reading is folded in so on-stage device events have a
+    // context row to join against. A failed fetch loses today only, not the
+    // whole run - but it is logged, because "discovery ran without today" is
+    // otherwise indistinguishable from "today matched nothing".
+    let today = null;
+    try {
+      today = await deviceAdapter.getDailyContext();
+    } catch (err) {
+      console.log(`[discovery:${state.productId}] today's context unavailable: ${(err as Error).message}`);
+    }
+    const context = withToday(readContextWindow(60), today);
+
     return { events, context };
   })
   .addNode("findPattern", async (state: DiscoveryStateValue) => {

@@ -1,7 +1,7 @@
 import { HumanMessage } from "@langchain/core/messages";
 import type { ProductId } from "@prompthon/shared";
 import { exaoneReasoning } from "../models/exaone.js";
-import { getTodayContext } from "../data/appContext.js";
+import { deviceAdapter } from "../device/adapter.js";
 import { listSkills } from "../data/skills.js";
 
 export interface RelevantSkill {
@@ -10,18 +10,33 @@ export interface RelevantSkill {
 }
 
 /**
- * FR-5.11 boundary, same as discovery/graph.ts: only EXAONE ever sees raw
- * app context. The control agent reaches this only through
- * tools/skills.ts's checkTodayForRelevantSkill, which gets back nothing but
- * the finished natural-language `suggestion` string below - never today's
- * actual weather/distance/screen-time numbers.
+ * Matches today against skills the character has ALREADY discovered, and
+ * returns nothing but a finished natural-language sentence - the control agent
+ * never sees which stored routine matched or how confident the match was.
+ *
+ * Today's raw figures are no longer secret from the control agent (see
+ * tools/context.ts), so this is not the FR-5.11 boundary it once was. What it
+ * still keeps on this side of the line is the DERIVED routine: EXAONE decides
+ * whether today looks like a learned pattern, and the control agent only
+ * receives the offer, not the reasoning that produced it.
+ *
+ * Today's reading comes from the device over HTTP rather than from stored
+ * history, so it is always genuinely today's.
  */
 export async function checkTodayRelevance(productId: ProductId): Promise<RelevantSkill | null> {
-  const today = getTodayContext();
-  if (!today) return null;
-
   const skills = await listSkills(productId);
   if (skills.length === 0) return null;
+
+  let today;
+  try {
+    today = await deviceAdapter.getDailyContext();
+  } catch (err) {
+    // Loud, not silent: with no context there is nothing to match, and a
+    // character that stops greeting proactively for an unlogged reason is the
+    // hardest kind of demo failure to diagnose on stage.
+    console.log(`[relevance:${productId}] no context available: ${(err as Error).message}`);
+    return null;
+  }
 
   const prompt = `Today's context: ${JSON.stringify(today)}.
 
@@ -32,7 +47,7 @@ Does today's context clearly match the condition described in exactly ONE of the
 
 If yes, respond with exactly this, nothing else:
 SKILL_ID: <the matching skill's id>
-Then one warm, natural sentence in the character's own voice, mentioning today's specific relevant facts (whichever of weather, distance travelled, or screen time the skill's condition actually depends on - not all three unless all three matter), and offering to apply that skill, phrased as a question.
+Then one warm, natural sentence in the character's own voice, mentioning today's specific relevant facts (whichever of weather, steps, distance travelled, or screen time the skill's condition actually depends on - not all of them unless all of them matter), and offering to apply that skill, phrased as a question.
 
 If no skill clearly matches, respond with exactly: NO_MATCH`;
 

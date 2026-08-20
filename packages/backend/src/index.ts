@@ -9,6 +9,7 @@ import { shoecaseRouter } from "./routes/shoecase.js";
 import { pralRouter } from "./routes/pral.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
+import { contextRouter } from "./routes/context.js";
 import { seedContext } from "./data/appContext.js";
 
 const app = express();
@@ -20,16 +21,23 @@ app.use(express.json());
 app.use("/api/characters/massagechair", massagechairRouter);
 app.use("/api/characters/shoecase", shoecaseRouter);
 app.use("/api/characters/pral", pralRouter);
+// Not product-scoped, so not under /api/characters - one demo user, one
+// reading, read by all three characters.
+app.use(contextRouter);
 app.use(internalRouter);
 app.use(healthRouter);
 
 /**
- * App-level context (GPS distance, weather, screen time) isn't device data
- * and doesn't go through device-stub - backend owns the fixture directly
- * and loads it straight into `data/appContext.ts` at boot, no HTTP hop, no
- * seed endpoint needed (there's no live path that ever generates this data,
- * mocked entirely). One file per scenario, same reasoning as device-stub's
- * fixtures: keep signals clean rather than mixed.
+ * PAST DAYS of app-level context (weather, steps, distance, screen time).
+ * Backend owns this fixture directly and loads it straight into
+ * `data/appContext.ts` at boot - no HTTP hop, no seed endpoint needed, since
+ * there's no live path that generates history. One file per scenario, same
+ * reasoning as device-stub's fixtures: keep signals clean rather than mixed.
+ *
+ * TODAY's reading is a separate thing entirely and does NOT come from here:
+ * device-stub serves it over HTTP (`/context/today`) so the agent has to ask
+ * for it, and so the frontend can show the user the same figures the character
+ * is reasoning from. See `DailyContext` in @prompthon/shared.
  */
 function loadAppContextFixturesOnBoot(): void {
   const dir = join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
