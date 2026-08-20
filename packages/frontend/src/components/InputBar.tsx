@@ -1,12 +1,7 @@
 /**
  * Input, pinned and present in every state.
  *
- * Voice is the wide bar and text is the compact row beneath it, because that is
- * the order the product argues for: you say what you want, and typing is the
- * fallback. The old layout had them the other way round, with voice as a small
- * round button beside a text field.
- *
- * The bar is tap-to-start, tap-to-finish rather than press-and-hold. Hold would
+ * The mic is tap-to-start, tap-to-finish rather than press-and-hold. Hold would
  * read better, but `getUserMedia` resolves asynchronously, so a quick release
  * can land while `micStatus` is still `idle` and start a second recorder. A
  * duplicated recorder on stage is worse than a less tactile affordance.
@@ -21,9 +16,12 @@
  * treated as one. There is no prompt-injection guard here for the same reason:
  * NFR-1.4 is a trust-boundary control and a browser is not a trust boundary.
  *
- * FE-R-20: with the mic unavailable the bar is replaced by a single line that
- * says so, and the text path is untouched. Voice is first in the drop order, so
- * it is an addition to the text path rather than a second input path.
+ * FE-R-20: voice input has no working backend yet (no `/api/transcribe` route,
+ * and the mic is forced `unavailable` in real-API mode - see `App.tsx`), so the
+ * mic is a small icon button beside the text field rather than the wide,
+ * primary bar it will become once transcription is real. It renders in every
+ * `micStatus`, including `unavailable` - a disabled placeholder instead of an
+ * error line, since "coming soon" is not a failure.
  *
  * FE-R-21: a transcript arrives in `draft` as an editable value, not as a
  * dispatch. Stage misrecognition becomes recoverable rather than merely legible.
@@ -36,9 +34,6 @@ import type { Skill } from '@prompthon/shared';
 import { INPUT_MAX_LENGTH, INPUT_WARN_AT, inputLength, isSendable } from '../pure';
 import type { translator } from '../strings';
 import type { MicStatus } from '../state';
-
-/** Deterministic so the waveform does not reshuffle on every render. */
-const WAVE_BARS = Array.from({ length: 28 }, (_, index) => index);
 
 interface Props {
   draft: string;
@@ -92,45 +87,6 @@ export function InputBar({
         </div>
       ) : null}
 
-      {micStatus === 'unavailable' ? (
-        <p className="voice-unavailable" data-testid="input-mic-unavailable">
-          {t('input.mic.unavailable')}
-        </p>
-      ) : (
-        <button
-          type="button"
-          className="voice-bar"
-          data-state={micStatus}
-          disabled={micStatus === 'transcribing'}
-          onClick={onVoice}
-          aria-label={micLabel}
-          data-testid="input-mic-button"
-        >
-          {recording ? (
-            <span className="voice-wave" aria-hidden="true">
-              {WAVE_BARS.map((index) => (
-                <i
-                  key={index}
-                  style={{
-                    animationDelay: `${(index % 7) * 0.06 + Math.floor(index / 7) * 0.02}s`,
-                    animationDuration: `${0.7 + (index % 5) * 0.08}s`,
-                  }}
-                />
-              ))}
-            </span>
-          ) : (
-            <span className="voice-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <rect x="9.5" y="3.5" width="5" height="10.5" rx="2.5" />
-                <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
-                <path d="M12 18v2.5" />
-              </svg>
-            </span>
-          )}
-          <span className="voice-label">{micLabel}</span>
-        </button>
-      )}
-
       <form
         className="input-row"
         onSubmit={(event) => {
@@ -138,6 +94,22 @@ export function InputBar({
           if (sendable) onSend(draft);
         }}
       >
+        <button
+          type="button"
+          className="mic-button"
+          data-state={micStatus}
+          disabled={micStatus === 'unavailable' || micStatus === 'transcribing'}
+          onClick={onVoice}
+          aria-label={micLabel}
+          data-testid="input-mic-button"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9.5" y="3.5" width="5" height="10.5" rx="2.5" />
+            <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
+            <path d="M12 18v2.5" />
+          </svg>
+        </button>
+
         <label className="input-field">
           <span className="visually-hidden">{t('input.placeholder')}</span>
           <input

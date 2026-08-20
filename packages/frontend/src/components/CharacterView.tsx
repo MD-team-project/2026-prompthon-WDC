@@ -12,7 +12,7 @@
  *                  nothing at all between discoveries - so its presence never
  *                  moves anything else on this screen, HUD included.
  *   stage-wrap     the character, flex:1. Level-up and speech happen here
- *   switcher       the other two characters, one tap or one swipe away
+ *   switcher       the other two characters, one tap away
  *   stat-panel     device state, grouped into one panel - always here
  *   input-bar      voice first, text beneath
  *   + sheets       conversation log, skill compendium - raised, not routed
@@ -35,7 +35,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Character, ChatMessage, DeviceStats, Lang, Skill } from '@prompthon/shared';
-import { neighbourId, progressRatio } from '../pure';
+import { progressRatio } from '../pure';
 import type { MicStatus } from '../state';
 import type { translator } from '../strings';
 import { CharacterStage } from './CharacterStage';
@@ -45,9 +45,6 @@ import { InputBar } from './InputBar';
 import { SkillCompendium } from './SkillCompendium';
 import { SpeechArea, ConversationSheet } from './SpeechArea';
 import { SpotlightCard } from './SpotlightCard';
-
-/** Far enough that a tap on a dot or a vertical scroll is not a swipe. */
-const SWIPE_MIN_PX = 44;
 
 interface Props {
   character: Character;
@@ -84,7 +81,6 @@ interface Props {
 
 export function CharacterView(props: Props) {
   const { character, t } = props;
-  const swipeStartX = useRef<number | null>(null);
 
   /*
    * `.stage-slide` (character + caption) re-mounts on every switch so its
@@ -113,25 +109,6 @@ export function CharacterView(props: Props) {
   const selectCharacter = (characterId: string, direction: 1 | -1) => {
     pendingDirectionRef.current = direction;
     props.onSelectCharacter(characterId);
-  };
-
-  // The switcher dots and this swipe dispatch the same action, so a swipe has no
-  // state of its own to keep in step. `neighbourId` owns the wrap-around.
-  const endSwipe = (clientX: number) => {
-    const start = swipeStartX.current;
-    swipeStartX.current = null;
-    if (start === null) return;
-
-    const travelled = clientX - start;
-    if (Math.abs(travelled) < SWIPE_MIN_PX) return;
-
-    const direction: 1 | -1 = travelled < 0 ? 1 : -1;
-    const target = neighbourId(
-      props.characters.map((c) => c.id),
-      character.id,
-      direction,
-    );
-    if (target) selectCharacter(target, direction);
   };
 
   /** Dots have no drag direction of their own - forward if the tapped
@@ -224,17 +201,7 @@ export function CharacterView(props: Props) {
         />
       </header>
 
-      <div
-        className="stage-wrap"
-        onPointerDown={(event) => {
-          swipeStartX.current = event.clientX;
-        }}
-        onPointerUp={(event) => endSwipe(event.clientX)}
-        onPointerCancel={() => {
-          swipeStartX.current = null;
-        }}
-        data-testid="stage-wrap"
-      >
+      <div className="stage-wrap" data-testid="stage-wrap">
         <div
           key={slide?.token ?? 'initial'}
           className="stage-slide"
@@ -271,7 +238,6 @@ export function CharacterView(props: Props) {
             t={t}
             onSelect={(characterId) => selectCharacter(characterId, directionTo(characterId))}
           />
-          <p className="stage-hint">{t('stage.hint')}</p>
         </div>
       ) : null}
 

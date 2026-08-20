@@ -4,8 +4,7 @@
  * The roster still exists and is still the entry point (FR-7.2, FR-7.3), but
  * switching used to require leaving the character screen, which made three
  * characters read as three rows in a list rather than three characters sharing a
- * stage. These dots plus a horizontal swipe on the stage keep the character on
- * screen for the whole demo.
+ * stage. These dots keep the character on screen for the whole demo.
  *
  * FE-R-28: an unseen announcement raises a badge here too. It is a badge and
  * nothing that takes the screen - no toast, no forced navigation.

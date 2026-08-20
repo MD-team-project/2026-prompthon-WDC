@@ -636,8 +636,6 @@ svg {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  /* Horizontal swipe switches character; vertical gestures stay with the page. */
-  touch-action: pan-y;
 }
 
 /*
@@ -647,8 +645,8 @@ svg {
  *
  * Only entrance is animated: the outgoing character is simply gone the
  * instant React swaps it (there is exactly one character mounted at a time),
- * so this reads as the new one sliding in from the side it was swiped from
- * or the dot it was picked from, rather than a two-panel crossfade.
+ * so this reads as the new one sliding in from the side of the dot it was
+ * picked from, rather than a two-panel crossfade.
  *
  * Same flex role `.stage-wrap` gave its children directly before this
  * wrapper existed - `.stage` still needs to be the region that grows.
@@ -1117,12 +1115,6 @@ svg {
   box-shadow: 0 0 0 2px var(--bg);
 }
 
-.stage-hint {
-  margin: 0;
-  font-size: 10.5px;
-  color: var(--text-mute);
-}
-
 /* --- device state, grouped into one panel --- */
 
 .stat-panel {
@@ -1364,8 +1356,7 @@ svg {
   height: 15px;
 }
 
-/* --- input: voice first, text beneath --- */
-
+/* --- input: mic, text field, send, one row --- */
 
 .input-bar {
   flex: none;
@@ -1401,76 +1392,43 @@ svg {
   font-weight: 600;
 }
 
-.voice-bar {
-  position: relative;
-  width: 100%;
-  height: 54px;
-  border-radius: 16px;
-  background: var(--surface);
+/* FE-R-20: a shell for voice input, not yet backed by real transcription -
+   sized and placed like `.send-button` so it reads as a peer action rather
+   than a half-built feature. */
+.mic-button {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   border: 2px solid var(--ink);
-  box-shadow: 0 2px 0 var(--ink-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  overflow: hidden;
-  transition:
-    background 220ms ease,
-    border-color 220ms ease;
+  background: var(--surface);
+  color: var(--text-dim);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 3px 0 var(--ink-soft);
+  transition: opacity 160ms ease, transform 100ms ease, box-shadow 100ms ease;
 }
 
-.voice-bar[data-state='recording'] {
+.mic-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+}
+
+.mic-button:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+.mic-button[data-state='recording'] {
   background: var(--tint);
   border-color: var(--product);
-}
-
-.voice-bar[data-state='transcribing'] {
-  opacity: 0.7;
-}
-
-.voice-icon {
-  display: inline-flex;
-  color: var(--text-dim);
-}
-
-.voice-icon svg {
-  width: 21px;
-  height: 21px;
-}
-
-.voice-label {
-  font-size: 13.5px;
-  color: var(--text-dim);
-}
-
-.voice-bar[data-state='recording'] .voice-label {
   color: var(--product-ink);
-  font-weight: 600;
 }
 
-/* FE-R-22: input visualisation only. Nothing in this app plays audio. */
-.voice-wave {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  height: 24px;
-}
-
-.voice-wave i {
-  width: 2px;
-  border-radius: 2px;
-  background: var(--product);
-  height: 5px;
-  animation: equalize 0.85s ease-in-out infinite;
-}
-
-/* FE-R-20: the mic reports itself and nothing else is lost. The text row below
-   is untouched. */
-.voice-unavailable {
-  margin: 0;
-  text-align: center;
-  font-size: 11.5px;
-  color: var(--text-mute);
+.mic-button:disabled {
+  opacity: 0.5;
+  box-shadow: none;
 }
 
 .input-row {
@@ -1999,8 +1957,8 @@ svg {
 }
 
 /* `.stage-slide`'s entrance: enters from the right when the switch moved
-   forward (next dot, or a leftward swipe), and mirrors from the left for
-   backward - see the direction note on `.stage-slide` itself. */
+   forward (a later dot), and mirrors from the left for backward - see the
+   direction note on `.stage-slide` itself. */
 @keyframes stage-slide-in-next {
   from {
     opacity: 0;
@@ -2062,18 +2020,6 @@ svg {
   to {
     opacity: 1;
     transform: none;
-  }
-}
-
-@keyframes equalize {
-  0%,
-  100% {
-    height: 4px;
-    opacity: 0.45;
-  }
-  50% {
-    height: 20px;
-    opacity: 1;
   }
 }
 
