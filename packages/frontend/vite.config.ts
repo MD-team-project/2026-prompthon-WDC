@@ -17,6 +17,22 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      // Dev-only force-discovery trigger, used by discovery-demo.html.
+      '/internal': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    rollupOptions: {
+      // Multi-page build: the two demo screens are separate HTML entries,
+      // opened directly by URL rather than routed to from the main app.
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        deviceDemo: fileURLToPath(new URL('./device-demo.html', import.meta.url)),
+        discoveryDemo: fileURLToPath(new URL('./discovery-demo.html', import.meta.url)),
+      },
     },
   },
   test: {
