@@ -52,7 +52,13 @@ export interface ApiClient {
   /** `null` when there is nothing to report yet - see the class-level note. */
   getDeviceState(characterId: string): Promise<DeviceStats | null>;
   listSkills(characterId: string): Promise<Skill[]>;
-  sendMessage(characterId: string, text: string, skillId: string | null): Promise<ActionResponse>;
+  /** `onToken` fires with each chunk of the reply as BE streams it, before the returned promise settles. */
+  sendMessage(
+    characterId: string,
+    text: string,
+    skillId: string | null,
+    onToken?: (text: string) => void,
+  ): Promise<ActionResponse>;
   invokeSkill(characterId: string, skillId: string): Promise<ActionResponse>;
   transcribe(audio: Blob): Promise<string>;
   /** Returns a disconnect function. */
@@ -177,13 +183,16 @@ function characterMessage(characterId: string, text: string, kind: ChatMessage['
 
 /**
  * Reads an SSE response body until its `done` event, and returns that event's
- * reply. `/chat`'s intermediate `token`/`deviceState` events are BE's live
- * progress for a UI that streams the reply as it is generated - this client
- * does not stream yet, so it drains them and uses the `done` event's `reply`,
- * which already carries the accumulated prose and the last deviceState BE saw
- * (see `packages/backend/src/routes/chat.ts`).
+ * reply. Each intermediate `token` event is BE's live progress as the reply is
+ * generated - forwarded to `onToken` as it arrives so the UI can render it
+ * word by word instead of waiting for `done`. The `done` event's `reply` is
+ * still the source of truth returned here (accumulated prose and the last
+ * deviceState BE saw - see `packages/backend/src/routes/character.ts`).
  */
-async function readChatUntilDone(body: ReadableStream<Uint8Array>): Promise<BeAgentReply> {
+async function readChatUntilDone(
+  body: ReadableStream<Uint8Array>,
+  onToken?: (text: string) => void,
+): Promise<BeAgentReply> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -201,6 +210,7 @@ async function readChatUntilDone(body: ReadableStream<Uint8Array>): Promise<BeAg
       for (const line of frame.split('\n')) {
         if (!line.startsWith('data: ')) continue;
         const event = JSON.parse(line.slice('data: '.length)) as BeControlEvent;
+        if (event.type === 'token') onToken?.(event.text);
         if (event.type === 'done') return event.reply;
       }
 
@@ -242,7 +252,7 @@ function createHttpClient(getLang: GetLang): ApiClient {
       return summaries.map((s) => toSkill(s, getLang()));
     },
 
-    async sendMessage(characterId, text, skillId) {
+    async sendMessage(characterId, text, skillId, onToken) {
       const response = await fetch(`/api/characters/${characterId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -252,7 +262,7 @@ function createHttpClient(getLang: GetLang): ApiClient {
         throw new Error(`Request failed (${response.status})`);
       }
 
-      const reply = await readChatUntilDone(response.body);
+      const reply = await readChatUntilDone(response.body, onToken);
       // A model-call failure still arrives as a `done` event with its own in-character
       // apology and no deviceState (NFR-2.2, by BE's own design) - that is rendered as
       // the character speaking, styled as a failure, rather than discarded in favour of

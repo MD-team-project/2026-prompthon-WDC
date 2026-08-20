@@ -202,8 +202,27 @@ function firstNumber(text: string): number | null {
 
 let messageSeq = 0;
 
-function characterMessage(characterId: string, text: string): ChatMessage {
+/** Simulated token pacing, for the same "typed out live" look the real BE stream gets. */
+const STREAM_CHUNK_MS = 60;
+
+/**
+ * Streams `text` out in word-sized chunks via `onToken` (mirroring BE's real
+ * `token` events) before resolving with the finished message, so mock mode
+ * exercises the same streaming UI real BE does instead of only real BE.
+ */
+async function characterMessage(
+  characterId: string,
+  text: string,
+  onToken?: (text: string) => void,
+): Promise<ChatMessage> {
   messageSeq += 1;
+  if (onToken) {
+    const words = text.split(/(\s+)/).filter(Boolean);
+    for (const word of words) {
+      await wait(STREAM_CHUNK_MS);
+      onToken(word);
+    }
+  }
   return {
     id: `mock_${messageSeq}`,
     characterId,
@@ -262,7 +281,7 @@ export function createMockClient(getLang: GetLang): ApiClient {
       return structuredClone(skills[characterId] ?? []);
     },
 
-    async sendMessage(characterId, text, skillId) {
+    async sendMessage(characterId, text, skillId, onToken) {
       await wait(LATENCY_MS);
       const lang: Lang = getLang();
 
@@ -289,7 +308,7 @@ export function createMockClient(getLang: GetLang): ApiClient {
         skills[characterId] = list.map((s) => (s.id === skillId ? revised : s));
 
         return {
-          message: characterMessage(
+          message: await characterMessage(
             characterId,
             retiring
               ? lang === "ko"
@@ -298,6 +317,7 @@ export function createMockClient(getLang: GetLang): ApiClient {
               : lang === "ko"
                 ? "조건을 바꿨어요. 스킬은 그대로 두고 트리거만 손봤습니다."
                 : "Adjusted the trigger. The skill itself is unchanged.",
+            onToken,
           ),
           deviceState: null,
           progression: bumpExp(characterId),
@@ -315,11 +335,12 @@ export function createMockClient(getLang: GetLang): ApiClient {
         setAttribute(characterId, "mode", "dry");
         setAttribute(characterId, "remainingMinutes", committed);
         return {
-          message: characterMessage(
+          message: await characterMessage(
             characterId,
             lang === "ko"
               ? `${requested}분 말씀하셨는데 이 제품은 ${committed}분까지만 돼서 ${committed}분으로 맞췄어요.`
               : `You said ${requested} minutes, but this product caps at ${committed}, so I set ${committed}.`,
+            onToken,
           ),
           deviceState: structuredClone(deviceState[characterId]!),
           progression: bumpExp(characterId),
@@ -329,9 +350,10 @@ export function createMockClient(getLang: GetLang): ApiClient {
 
       setAttribute(characterId, "power", true);
       return {
-        message: characterMessage(
+        message: await characterMessage(
           characterId,
           lang === "ko" ? "네, 그렇게 해뒀어요." : "Done, that is set.",
+          onToken,
         ),
         deviceState: structuredClone(deviceState[characterId]!),
         progression: bumpExp(characterId),
@@ -349,7 +371,7 @@ export function createMockClient(getLang: GetLang): ApiClient {
       setAttribute(characterId, "remainingMinutes", DEVICE_MINUTE_LIMIT);
 
       return {
-        message: characterMessage(
+        message: await characterMessage(
           characterId,
           getLang() === "ko"
             ? `"${target.name}" 실행했어요.`
