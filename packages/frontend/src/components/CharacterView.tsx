@@ -58,6 +58,7 @@ interface Props {
   skills: Skill[];
   unseen: Record<string, number>;
   pending: boolean;
+  streaming: boolean;
   levelUp: boolean;
   discovery: boolean;
   compendiumOpen: boolean;
@@ -246,6 +247,8 @@ export function CharacterView(props: Props) {
             onLevelUpDone={props.onLevelUpDone}
             discovery={props.discovery}
             onDiscoveryDone={props.onDiscoveryDone}
+            pending={props.pending}
+            streaming={props.streaming}
             t={t}
           />
 

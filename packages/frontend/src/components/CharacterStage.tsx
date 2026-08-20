@@ -33,6 +33,12 @@
  * levelling up is the rarer event. Either one hands back to idle when its
  * frames run out, driven by frame count rather than a fixed duration.
  *
+ * Two more sequences loop rather than play once: `thinking/` while `pending`
+ * is true and no token has arrived yet, and `talking/` from the first
+ * streamed token until the reply finishes. Both hand back to idle the moment
+ * their driving flag clears rather than on a frame count, since neither has a
+ * fixed length to run out.
+ *
  * `pral` and `shoecase` have real art too (`STATIC_ART_SRC` below) but only
  * one frame each, no reaction sequence - so they keep the CSS pop/burst
  * effect on top of that single image, timed by `LEVEL_UP_MS` instead, and
@@ -65,12 +71,28 @@ const SURPRISE_FRAME_MS = 40;
 const LEVEL_UP_FRAME_COUNT = 56;
 const LEVEL_UP_FRAME_MS = 40;
 
+/** Full 121-frame "thinking" loop, played for as long as a chat reply is pending. */
+const THINKING_FRAME_COUNT = 121;
+const THINKING_FRAME_MS = 40;
+
+/** Full 73-frame "talking" loop, played for as long as the reply is still streaming in. */
+const TALKING_FRAME_COUNT = 73;
+const TALKING_FRAME_MS = 40;
+
 function surpriseFrameSrc(index: number): string {
   return `/characters/massagechair/surprise/frame-${index}.webp`;
 }
 
 function levelUpFrameSrc(index: number): string {
   return `/characters/massagechair/levelup/frame-${index}.webp`;
+}
+
+function thinkingFrameSrc(index: number): string {
+  return `/characters/massagechair/thinking/frame-${index}.webp`;
+}
+
+function talkingFrameSrc(index: number): string {
+  return `/characters/massagechair/talking/frame-${index}.webp`;
 }
 
 /** The single idle image for products with real art but no reaction sequence. */
@@ -87,6 +109,10 @@ interface Props {
   /** True from the moment a genuinely new skill arrives until the reaction finishes playing. */
   discovery: boolean;
   onDiscoveryDone: () => void;
+  /** True while a chat reply is in flight for this character. */
+  pending: boolean;
+  /** True from the reply's first streamed token until it finishes arriving. */
+  streaming: boolean;
   t: ReturnType<typeof translator>;
 }
 
@@ -97,6 +123,8 @@ export function CharacterStage({
   onLevelUpDone,
   discovery,
   onDiscoveryDone,
+  pending,
+  streaming,
   t,
 }: Props) {
   const isMassageChair = productId === 'massagechair';
@@ -172,14 +200,60 @@ export function CharacterStage({
     return () => clearTimeout(timer);
   }, [discovery, isMassageChair]);
 
-  // Level-up outranks the discovery reaction when both are true at once (the
-  // mock, and presumably BE, often send them together) - it is the rarer of
-  // the two. Either falls back to the idle frame.
+  // Unlike surprise/levelup, there's no "done" callback here - the reply
+  // arriving is what clears `pending` upstream, not a fixed frame count. So
+  // this loops for as long as `pending` stays true (and streaming hasn't
+  // taken over below) instead of playing once.
+  const [thinkingFrame, setThinkingFrame] = useState(0);
+  const thinking = pending && !streaming;
+
+  useEffect(() => {
+    if (!isMassageChair || !thinking) {
+      setThinkingFrame(0);
+      return;
+    }
+
+    let frame = 0;
+    const timer = setInterval(() => {
+      frame = (frame + 1) % THINKING_FRAME_COUNT;
+      setThinkingFrame(frame);
+    }, THINKING_FRAME_MS);
+
+    return () => clearInterval(timer);
+  }, [thinking, isMassageChair]);
+
+  // Same "loop until the flag clears" shape as thinking, above - the reply
+  // streaming in is what keeps `streaming` true, not a frame count.
+  const [talkingFrame, setTalkingFrame] = useState(0);
+
+  useEffect(() => {
+    if (!isMassageChair || !streaming) {
+      setTalkingFrame(0);
+      return;
+    }
+
+    let frame = 0;
+    const timer = setInterval(() => {
+      frame = (frame + 1) % TALKING_FRAME_COUNT;
+      setTalkingFrame(frame);
+    }, TALKING_FRAME_MS);
+
+    return () => clearInterval(timer);
+  }, [streaming, isMassageChair]);
+
+  // Level-up and the discovery reaction both outrank talking/thinking - they
+  // are the rarer events and each already has its own finite frame count to
+  // run out. Talking outranks thinking since it means the reply has started
+  // arriving, which is further along than merely waiting on one.
   const spriteSrc = levelUp
     ? levelUpFrameSrc(levelUpFrame)
     : discovery
       ? surpriseFrameSrc(surpriseFrame)
-      : surpriseFrameSrc(0);
+      : streaming
+        ? talkingFrameSrc(talkingFrame)
+        : thinking
+          ? thinkingFrameSrc(thinkingFrame)
+          : surpriseFrameSrc(0);
 
   return (
     <div className="stage" data-testid="character-stage">
