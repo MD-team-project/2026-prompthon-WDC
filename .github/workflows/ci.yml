@@ -1,0 +1,41 @@
+# CI.
+#
+# Created by the FE stream because PBT-08 requires property-based tests to run in
+# a CI pipeline and none existed. Kept deliberately small.
+#
+# BE and INFRA: add your own job here. This one names the frontend workspace
+# explicitly rather than running every workspace, so it does not fail while your
+# packages do not exist yet.
+#
+# The PBT seed is logged on every run (see packages/frontend/tests/setup.ts).
+# Replay a failure by re-running with PBT_SEED set to the seed from the log.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  frontend:
+    name: frontend - typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck --workspace @prompthon/frontend
+
+      - name: Test, including property-based tests
+        run: npm run test --workspace @prompthon/frontend
+
+      - name: Build
+        run: npm run build --workspace @prompthon/frontend

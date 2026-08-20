@@ -14,12 +14,15 @@
     "dev": "concurrently -n stub,api -c cyan,green \"npm:dev:stub\" \"npm:dev:api\"",
     "dev:stub": "npm run dev -w @prompthon/device-stub",
     "dev:api": "npm run dev -w @prompthon/backend",
+    "dev:fe": "npm run dev --workspace @prompthon/frontend",
     "build": "npm run build -w @prompthon/shared && npm run build -w @prompthon/device-stub && npm run build -w @prompthon/backend",
+    "build:fe": "npm run build --workspace @prompthon/frontend",
     "start": "concurrently -n stub,api -c cyan,green \"npm:start:stub\" \"npm:start:api\"",
     "start:stub": "npm run start -w @prompthon/device-stub",
     "start:api": "npm run start -w @prompthon/backend",
     "check": "tsc -b packages/shared packages/device-stub packages/backend",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:fe": "npm run test --workspace @prompthon/frontend"
   },
   "devDependencies": {
     "concurrently": "9.1.2",

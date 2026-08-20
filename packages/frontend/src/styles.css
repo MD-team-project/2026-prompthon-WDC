@@ -1,0 +1,2134 @@
+/*
+ * Plain CSS with custom properties. No UI kit - two screens and two sheets, and
+ * a component library would be larger than the application.
+ *
+ * Mobile-first (FR-7.1). Per-product colour lives in a custom property that the
+ * level layer shifts, which is how FR-2.5 is delivered without per-level
+ * artwork (FE-R-10).
+ *
+ * Light, and warm rather than white. The character is the largest thing on the
+ * screen and a paper-toned stage keeps its per-product tint readable under
+ * projection, where a dark theme turns every tint into the same grey.
+ *
+ * Everything AROUND the character reads as a game HUD rather than a form: a
+ * chunky ink outline (`--ink`) plus a hard offset shadow instead of a blur is
+ * what a mobile-game button/panel/badge looks like, and levels, rarity and
+ * counters get a gold treatment (`--gold`) rather than the per-product hue, so
+ * "this number just went up" reads the same way on every product. The stage
+ * itself - the character's own art, floor and floating motion - is
+ * deliberately untouched by any of this.
+ *
+ * LAYOUT BUDGET - the point of the whole file.
+ *
+ *   `.stage-wrap` is the only region with `flex: 1`. Every other strip is
+ *   `flex: none`. Previously `.speech` held the growth and the character sat in
+ *   a fixed 176px band above it, which made this a chat client with an avatar
+ *   rather than the character-first screen Q5 D decided on.
+ */
+
+:root {
+  /* surfaces. White, to match the character frames' white background - the
+     stage sits directly on `--bg` with no boxed edge around the art, so the two
+     need to be the same white rather than merely close. Cards can no longer be
+     "whiter than the page" once the page IS white, so `--surface` shifted down
+     to what used to be `--surface-2`, and a new step was added below it. */
+  --bg: #ffffff;
+  --bg-deep: #ffffff;
+  --surface: #f6f4f0;
+  --surface-2: #ede9e2;
+  --line: #e3e0db;
+  --line-2: #edeae5;
+
+  /* ink. --text-mute is decorative only and never carries information alone. */
+  --text: #191816;
+  --text-dim: #6e6b65;
+  --text-mute: #a9a59d;
+
+  --danger: #a8382f;
+  --danger-bg: #f7e7e5;
+
+  --radius: 14px;
+  --radius-lg: 20px;
+
+  /*
+   * Per-product accent.
+   *
+   * `--product` is for strokes, fills and tints. `--product-ink` is the same
+   * hue darkened until it clears 4.5:1 on white, and is the only one used for
+   * text or for a background behind white text. They are declared as literal
+   * values in each block below rather than derived with color-mix from
+   * `--product`, because a custom property that references another resolves
+   * against the element it is DECLARED on - a `--product-ink` defined once in
+   * `:root` would silently keep the root's hue on every product.
+   */
+  --product: #6e7ba8;
+  --product-ink: #4e5b85;
+  --tint: #e8eaf2;
+
+  /*
+   * Game-HUD layer.
+   *
+   * `--ink` is the outline/bevel colour for every chunky panel, button and
+   * badge - a warm near-black rather than a true black, so it sits comfortably
+   * next to the paper surfaces instead of looking like a debug border.
+   * `--ink-soft` is the same ink at low opacity, for outlines that need to
+   * read as a frame without competing with `--ink` itself where the two
+   * appear together (e.g. a soft-ink border under a solid-ink bevel shadow).
+   *
+   * `--gold` is reserved for "this is a game stat": level chips, the level-up
+   * banner and rare-tier marks. It never appears as a per-product colour, so
+   * it stays legible as "level/rarity" regardless of which product's hue is
+   * active.
+   */
+  --ink: #2a2016;
+  --ink-soft: rgba(42, 32, 22, 0.18);
+  --gold: #f2b134;
+  --gold-deep: #c8811a;
+  --gold-ink: #4a2f05;
+
+  --font-body: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+    'Apple SD Gothic Neo', 'Segoe UI', Roboto, sans-serif;
+  --font-latin: 'Instrument Sans', var(--font-body);
+}
+
+[data-product='pral'] {
+  --product: #a87c86;
+  --product-ink: #7e5a63;
+  --tint: #f3ebec;
+}
+
+[data-product='shoecase'] {
+  --product: #6e7ba8;
+  --product-ink: #4e5b85;
+  --tint: #e8eaf2;
+}
+
+[data-product='massagechair'] {
+  --product: #5a7a66;
+  --product-ink: #3f5b4a;
+  --tint: #e9efea;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+/* Only visible in the desktop letterbox around `.app` (mobile is full-bleed,
+   see the media query below) - a soft arcade backdrop instead of flat white,
+   so the device frame reads as sitting on a game menu rather than a page. */
+body {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(circle at 12% 100%, color-mix(in srgb, var(--gold) 14%, transparent), transparent 55%),
+    linear-gradient(165deg, #fdf7ec 0%, #f1e8d6 55%, #e7dcc3 100%);
+  background-color: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-body);
+  letter-spacing: -0.012em;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Icon defaults. Every inline svg in this app is a stroked line icon. */
+svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/*
+ * Tabular Latin figures.
+ *
+ * Level, exp, device values and dates all sit next to each other and all change
+ * while the screen is being watched. Proportional digits make them jitter;
+ * tabular figures are what make them read as instrument readouts.
+ */
+.tnum {
+  font-family: var(--font-latin);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.app {
+  width: 100%;
+  max-width: 430px;
+  height: 100%;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* On a laptop or a projector the app reads as a device rather than as a
+   stretched page. Below this it is full-bleed. */
+@media (min-width: 481px) and (min-height: 720px) {
+  #root {
+    padding: 22px;
+    box-sizing: border-box;
+  }
+
+  .app {
+    height: min(100%, 880px);
+    border-radius: 36px;
+    /* A console bezel rather than a page card: a solid ink ring, then the
+       same soft ambient shadow as before. */
+    border: 5px solid var(--ink);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.7) inset,
+      0 30px 60px -22px rgba(25, 24, 22, 0.4);
+  }
+}
+
+/* --- connection banner. FE-R-18: no close control. --- */
+
+.banner {
+  flex: none;
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-bottom: 1px solid color-mix(in srgb, var(--danger) 22%, transparent);
+  padding: 9px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.banner-retry {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* --- shared small pieces --- */
+
+.text-button {
+  padding: 4px 2px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pill {
+  background: var(--surface-2);
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+/* A counter gem, not a plain dot: gold fill + ink outline + a hard bevel
+   shadow reads as "score" the way a flat filled circle doesn't. */
+.badge {
+  position: relative;
+  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%);
+  color: var(--gold-ink);
+  border: 1.5px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink);
+  border-radius: 999px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  animation: badge-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.badge-corner {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+}
+
+/* An EXP/HP-bar track: an ink-rimmed sunken channel rather than a flat line,
+   so the fill reads as a resource being spent/gained rather than a progress
+   indicator borrowed from a form. */
+.bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--ink-soft);
+  box-shadow: inset 0 1px 2px rgba(25, 24, 22, 0.16);
+  overflow: hidden;
+}
+
+.bar-sm {
+  height: 5px;
+}
+
+.bar-fill {
+  position: relative;
+  display: block;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--product) 65%, #fff) 0%,
+    var(--product) 55%,
+    var(--product-ink) 100%
+  );
+  border-radius: 999px;
+  transition: width 400ms ease;
+}
+
+/* Glossy top sheen - the standard game-bar highlight that separates a "fuel
+   gauge" from a plain filled rectangle. */
+.bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 1px 1px auto 1px;
+  height: 45%;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+/* --- roster: a character-select screen --- */
+
+.roster {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 30px 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.roster-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.roster-title {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.roster-subtitle {
+  margin: 7px 0 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.roster-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.lang-toggle {
+  flex: none;
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-family: var(--font-latin);
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--ink);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+
+.lang-toggle:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/*
+ * A character-select card: ink outline plus a hard offset shadow underneath
+ * it, rather than a soft blur. Pressing it doesn't scale the card, it pushes
+ * the card DOWN onto its own shadow (the shadow's offset shrinks to match) -
+ * the standard "sticker button" press used across mobile game menus.
+ */
+.tile {
+  position: relative;
+  width: 100%;
+  background: var(--surface);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  overflow: hidden;
+  box-shadow: 0 5px 0 var(--ink);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.tile:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--ink);
+}
+
+.tile-aura {
+  position: absolute;
+  left: -30px;
+  top: 50%;
+  width: 190px;
+  height: 190px;
+  transform: translateY(-50%);
+  background: radial-gradient(circle, var(--tint) 0%, rgba(0, 0, 0, 0) 68%);
+  pointer-events: none;
+}
+
+.tile-art {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.tile-art-glyph {
+  width: 42px;
+  height: 48px;
+  border-radius: 48% 48% 34% 34%;
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--product) 82%, #fff),
+    var(--product-ink)
+  );
+  border: 2px solid var(--ink);
+  box-shadow: 0 3px 0 -1px color-mix(in srgb, var(--product) 70%, var(--ink));
+}
+
+/* FE-R-10: the same level-as-a-layer idea as the stage, at tile scale. */
+.tile-art-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+.tile-art[data-level='2'] .tile-art-ring,
+.tile-art[data-level='3'] .tile-art-ring {
+  border-width: 2px;
+  transform: scale(1.04);
+}
+
+.tile-art[data-level='4'] .tile-art-ring,
+.tile-art[data-level='5'] .tile-art-ring {
+  border-width: 2.5px;
+  border-style: double;
+  transform: scale(1.08);
+}
+
+.tile-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tile-name {
+  font-size: 15.5px;
+  font-weight: 600;
+}
+
+.tile-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+}
+
+.tile-level {
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-weight: 800;
+}
+
+.tile-exp {
+  color: var(--text-mute);
+}
+
+/* --- character screen --- */
+
+.character {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* HUD. Identity and the two ways off this screen, in one row. */
+/*
+ * Grid, not `justify-content: space-between`. The back button and the
+ * compendium button are different widths (the compendium button carries a
+ * label and a count pill; the back button is icon-only), so `space-between`
+ * gave the centre flex item an off-centre share of the row - it was centred
+ * within whatever width was left over, which was not itself centred. The two
+ * `1fr` columns are forced equal regardless of what their content needs, so
+ * the middle `auto` column - and the name inside it - lands on the row's true
+ * centre.
+ */
+.hud {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 4px;
+}
+
+.hud-button {
+  position: relative;
+  flex: none;
+  justify-self: start;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: 2px solid var(--ink);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--ink);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+
+.hud-button:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+.hud-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.hud-button-wide {
+  color: var(--text);
+  justify-self: end;
+}
+
+.hud-id {
+  min-width: 0;
+  justify-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.hud-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Level and exp grouped into one pill, apart from device state below. */
+.hud-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: var(--surface);
+  box-shadow: 0 2px 0 var(--ink-soft);
+}
+
+/* The level number as a gold "Lv" chip rather than plain coloured text - a
+   game HUD reads level as a badge, not a label. */
+.hud-level {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold-ink);
+  letter-spacing: 0.02em;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* `.bar`/`.bar-sm`/`.bar-fill` are block-level with no intrinsic width, sized
+   by their container everywhere else they're used (the roster tile gives them
+   the tile's full width). Here the container is an inline pill, so this is the
+   one place that needs a width of its own. */
+.hud-exp-bar {
+  width: 44px;
+}
+
+/* --- the stage. The only region that grows. --- */
+
+.stage-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  /* Horizontal swipe switches character; vertical gestures stay with the page. */
+  touch-action: pan-y;
+}
+
+/*
+ * The character + caption as one travelling unit, re-mounted (by `key`, in
+ * `CharacterView`) on every character switch so the entrance keyframe below
+ * actually replays - a prop change alone wouldn't restart a CSS animation.
+ *
+ * Only entrance is animated: the outgoing character is simply gone the
+ * instant React swaps it (there is exactly one character mounted at a time),
+ * so this reads as the new one sliding in from the side it was swiped from
+ * or the dot it was picked from, rather than a two-panel crossfade.
+ *
+ * Same flex role `.stage-wrap` gave its children directly before this
+ * wrapper existed - `.stage` still needs to be the region that grows.
+ */
+.stage-slide {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.stage-slide[data-direction='next'] {
+  animation: stage-slide-in-next 340ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.stage-slide[data-direction='prev'] {
+  animation: stage-slide-in-prev 340ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+/*
+ * The stage takes the slack and the caption sits directly beneath it.
+ *
+ * The first attempt pinned `.speech` to the bottom of `.stage-wrap` and reserved
+ * a fixed strip for it, which left the caption stranded roughly 100px below the
+ * character's feet - the reserve and half the centring slack stacked. Letting
+ * both share one flex column halves the gap and removes the magic number.
+ */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stage-aura {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 440px;
+  height: 440px;
+  transform: translate(-50%, -58%);
+  background: radial-gradient(circle at 50% 46%, var(--tint) 0%, rgba(0, 0, 0, 0) 66%);
+  animation: breathe 9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/*
+ * The character takes the stage's slack instead of sitting at a fixed size in
+ * the middle of it.
+ *
+ * Two earlier attempts at a fixed height (286px, then a `clamp` on `vh`) both
+ * left a band of empty stage between the character's feet and its caption,
+ * because centring a fixed-size box in a taller box splits the difference above
+ * and below. Growing into the space is what closes the gap, and the cap is what
+ * stops the character from becoming absurd on a tall desktop window.
+ *
+ * Height-driven rather than width-driven, so a short viewport shrinks the
+ * character instead of cropping it - `.stage-wrap` clips, and a cropped
+ * character loses its head and its feet at the same time.
+ */
+.stage-character {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  /* An implicit auto-sized row doesn't stretch to the container's full
+     height, so the figure's `height: min(100%, 340px)` had nothing definite
+     to resolve "100%" against and fell back to 340px regardless of how much
+     room was actually available - overflowing into `.speech` below once the
+     bob amplitude was big enough to make that visible. An explicit `1fr` row
+     gives it the real, definite height to shrink against. */
+  grid-template-rows: 1fr;
+  place-items: center;
+  padding: 14px 0;
+  /* Backstop: the figure (and the level-up burst ring) never paints past this
+     box, whatever the sizing math above lands on. */
+  overflow: hidden;
+}
+
+.stage-figure {
+  position: relative;
+  z-index: 1;
+  height: min(100%, 340px);
+  min-height: 0;
+  aspect-ratio: 188 / 246;
+  animation: bob 4.5s ease-in-out infinite;
+}
+
+/* Each product with real art keeps that art's own aspect ratio rather than
+   the placeholder blob's - trimmed to its own bounding box, so these are the
+   actual proportions of the art, not the source canvas. Everything else
+   about the figure (size, float) stays shared. */
+[data-product='massagechair'] .stage-figure {
+  aspect-ratio: 584 / 640;
+}
+
+[data-product='shoecase'] .stage-figure {
+  aspect-ratio: 900 / 806;
+}
+
+[data-product='pral'] .stage-figure {
+  aspect-ratio: 753 / 900;
+}
+
+/*
+ * The exported frames used to be near-white (254,254,254, not a flat 255)
+ * rather than transparent, so even matching `--bg` to pure white left a
+ * faint rectangle where the frame's own canvas met the page - visible the
+ * moment anything with actual colour (the aura tint, the floor shadow) sat
+ * behind it, since that flat canvas fully occluded whatever was underneath
+ * right up to a hard-ish edge.
+ *
+ * A position-based edge fade (the previous approach here) couldn't fix that
+ * without risk: some animated frames put real content - the chair's top
+ * edge in several `levelup` frames - flush against the frame's own boundary
+ * with zero margin, so fading "the outer few percent" would have clipped the
+ * character on exactly those frames.
+ *
+ * The frames now carry real alpha instead: each was flood-filled from its
+ * four borders inward, turning only the background actually connected to the
+ * edge transparent, and stopping at the character's own outline. That's why
+ * this can be a plain `object-fit: contain` with no mask - the transparency
+ * already follows the character's silhouette, edge margin or not.
+ */
+.stage-sprite {
+  width: 100%;
+  height: 100%;
+  /* Sized down from the frame's own bounds - full-size read as too large next
+     to the rest of the stage. */
+  transform: scale(0.8);
+  object-fit: contain;
+}
+
+/* Placeholder art, Q8 C. Deliberately abstract rather than a dashed box: a
+   dashed box on a projector reads as a missing asset, and this slot is the one
+   an illustration drops into with no code change (FE-R-11). */
+.stage-art {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50% 50% 44% 44% / 42% 42% 36% 36%;
+  background:
+    radial-gradient(circle at 36% 26%, rgba(255, 255, 255, 0.55), transparent 46%),
+    linear-gradient(168deg, color-mix(in srgb, var(--product) 74%, #fff) 0%, var(--product-ink) 100%);
+  box-shadow:
+    inset 0 -18px 40px -22px rgba(25, 24, 22, 0.5),
+    0 22px 44px -26px color-mix(in srgb, var(--product) 78%, transparent);
+}
+
+/*
+ * One antenna, so the placeholder reads as a companion rather than as a pill.
+ *
+ * Deliberately the only feature: no eyes and no face. A placeholder that
+ * suggests a character is honest, and a placeholder that invents one starts
+ * setting the illustration's direction from a stylesheet.
+ */
+.stage-art::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -13%;
+  width: 2px;
+  height: 15%;
+  transform: translateX(-50%) rotate(9deg);
+  transform-origin: bottom center;
+  border-radius: 999px;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--product) 55%, transparent),
+    var(--product)
+  );
+}
+
+.stage-art::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -17%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  transform: translateX(calc(-50% + 5px));
+  background: var(--product);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--product) 16%, transparent);
+  animation: glow 3.6s ease-in-out infinite;
+}
+
+/* Anchored to the ground rather than to the figure, so the float above reads as
+   the character leaving the floor instead of the whole scene drifting. */
+.stage-floor {
+  flex: none;
+  width: 100%;
+  height: 20px;
+  position: relative;
+}
+
+/*
+ * Shrinking `.stage-floor` itself didn't close the gap because the gap was
+ * never that strip - it's inside `.stage-figure`'s own box. The sprite is
+ * drawn at `transform: scale(0.8)` (a 10% margin on every side, unscaled) on
+ * top of frames that already carry a margin of their own around the
+ * character (checked across both sequences: roughly 7% of the frame). Pulled
+ * up by an amount sized to close most of that, leaving a small, deliberate
+ * gap rather than none. Massage-chair only: `pral` and `shoecase` draw their
+ * placeholder art edge-to-edge with no such margin, so this would just be
+ * dead space for them.
+ */
+[data-product='massagechair'] .stage-floor {
+  margin-top: -44px;
+}
+
+/*
+ * Dark and sized up from the first pass - against a white stage the original
+ * 0.14 alpha read as no shadow at all, and a floating character with no
+ * grounding cue is what made the white frame around it look pasted on rather
+ * than standing on the floor. Animated in the same 7s as `bob`, in phase: the
+ * shadow is at its largest and darkest exactly when the figure is at rest
+ * (0%/100%), and shrinks and fades as the figure rises (50%) - the standard
+ * paired cue for "this is floating above that", not two things moving
+ * independently.
+ */
+.stage-floor i {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: clamp(112px, 22vh, 148px);
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(25, 24, 22, 0.32), transparent 72%);
+  filter: blur(2px);
+  animation: shadow-breathe 4.5s ease-in-out infinite;
+}
+
+/*
+ * FE-R-8: level-up plays IN PLACE on the character. No full-screen overlay -
+ * an overlay would cover the element the screen is built around, and would also
+ * hide this effect when a discovery announcement lands mid-play (FE-R-9).
+ *
+ * ~1.5s, matching LEVEL_UP_MS, so an announcement arriving over SSE tends to
+ * land while the effect is still running.
+ */
+.stage-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(150px, 30vh, 260px);
+  height: clamp(150px, 30vh, 260px);
+  border-radius: 50%;
+  border: 3px solid var(--product);
+  /* A gold glow riding the product-coloured ring - the same "this is a game
+     event" gold used on the level chip and badge, layered on the per-product
+     ring rather than replacing it. */
+  box-shadow: 0 0 26px 4px color-mix(in srgb, var(--gold) 55%, transparent);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.stage-character[data-levelup='true'] {
+  animation: levelup-pop 1.5s ease-out;
+}
+
+.stage-character[data-levelup='true'] .stage-burst {
+  animation: levelup-burst 1.5s ease-out;
+}
+
+/*
+ * Its own keyframes rather than the shared `rise` - `rise`'s final step is
+ * `transform: none`, which is fine for elements with no resting transform of
+ * their own but silently wipes this one's `translateX` back to zero once the
+ * animation finishes (fill-mode holds the last keyframe indefinitely). Baking
+ * the offset into `levelup-rise` itself is what actually keeps it off-centre.
+ */
+.stage-levelup {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  font-family: var(--font-latin);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 6px 13px;
+  box-shadow: 0 3px 0 var(--ink);
+  /*
+   * 1.4s: long enough to read as its own beat - rise in with a small
+   * overshoot, hold, then float on up and fade - rather than the 0.5s fade
+   * this used to share with every other "rise" element on the screen. Comes
+   * in slightly under `LEVEL_UP_MS` (1.5s, the non-massagechair effect's own
+   * duration in `CharacterStage`) so the full arc plays out before React
+   * unmounts it, instead of being cut off mid-animation.
+   */
+  animation: levelup-rise 1.4s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+/* --- speech: a caption on the stage, not a bubble in a list --- */
+
+/*
+ * `min-height` rather than a fixed height: the idle caption is one short
+ * line, but the log toggle appears the moment there is a first message and
+ * an announcement is routinely two lines. `.speech` is `flex: none` sharing a
+ * fixed-height `.stage-wrap` with `.stage` (`flex: 1`), so any growth here
+ * comes directly out of the character's own box - without a floor, the jump
+ * from "idle, one line" to "toggle + two lines" on the very first message (or
+ * on a scripted level-up, which arrives together with an announcement)
+ * visibly shrinks and repositions the character. Sized for that common case;
+ * an unusually long message can still push past it, just by less.
+ */
+.speech {
+  flex: none;
+  min-height: 84px;
+  padding: 0 26px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.speech-log-toggle {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--text-mute);
+  font-size: 10.5px;
+}
+
+.speech-echo {
+  margin: 0;
+  max-width: 100%;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-mute);
+}
+
+.speech-echo::before {
+  content: '“';
+}
+
+.speech-echo::after {
+  content: '”';
+}
+
+.speech-caption {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  animation: rise 0.55s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.speech-caption[data-kind='announcement'] {
+  color: var(--product-ink);
+  font-weight: 600;
+}
+
+/* FE-R-17 request class: the character reporting it, styled apart from ordinary
+   speech but still in its own voice. */
+.speech-caption[data-kind='failure'] {
+  color: var(--danger);
+}
+
+.speech-caption-idle {
+  color: var(--text-mute);
+  font-size: 13.5px;
+}
+
+.speech-typing {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  height: 10px;
+}
+
+.speech-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--product);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.speech-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.speech-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* --- switcher --- */
+
+.stage-under {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 12px;
+}
+
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.switcher-dot {
+  position: relative;
+  width: 30px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+}
+
+/* A small gem rather than a dot - rotated square, so the active one reading
+   as a "selected slot" marker matches the rest of the game-HUD vocabulary. */
+.switcher-dot::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  border: 1px solid var(--ink-soft);
+  background: var(--text-mute);
+  opacity: 0.5;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease,
+    background 200ms ease;
+}
+
+.switcher-dot[data-active='true']::before {
+  background: var(--product);
+  border-color: var(--ink);
+  opacity: 1;
+  transform: rotate(45deg) scale(1.5);
+}
+
+/* FE-R-28: an unseen announcement raises a mark here as well as on the roster
+   and the back control. A mark, not a toast - discovery timing is outside the
+   presenter's control, so it must never cross the screen during another beat. */
+.switcher-mark {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--product-ink);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.stage-hint {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+/* --- device state, grouped into one panel --- */
+
+.stat-panel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 18px 12px;
+  padding: 10px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow: 0 2px 0 var(--ink-soft);
+}
+
+.stat-panel-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stat-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+.stat-list {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  transition: opacity 180ms ease;
+}
+
+.stat-list::-webkit-scrollbar {
+  display: none;
+}
+
+.stat-panel[data-pending='true'] .stat-list {
+  opacity: 0.5;
+}
+
+.stat-chip {
+  flex: none;
+  background: #fff;
+  border: 1.5px solid var(--line-2);
+  border-radius: 10px;
+  padding: 7px 11px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 11.5px;
+  box-shadow: 0 2px 0 var(--line);
+}
+
+.stat-chip dt {
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.stat-chip dd {
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stat-unit {
+  margin-left: 2px;
+  font-weight: 400;
+  color: var(--text-mute);
+}
+
+.stat-empty {
+  font-size: 11.5px;
+  color: var(--text-mute);
+}
+
+/* FE-R-3: the marker is on the BLOCK. It shows that something is in flight and
+   never what the result might be, because a generic renderer cannot know which
+   attribute a request will affect. */
+.stat-pending {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--product-ink);
+}
+
+.stat-pending i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--product);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+/* --- spotlight: the most recent discovery --- */
+
+/*
+ * A toast, floating just below `.hud` (`top: 100%` of it) rather than sitting
+ * in the flex column below. It has moved twice already: first attempt
+ * anchored it above `.input-bar`, which could cover `.stat-panel` (required
+ * to always be visible) if the message ran long; second attempt anchored it
+ * over the stage caption, which then landed on top of the "LEVEL UP" banner
+ * once that moved to the bottom of the stage too (see `CharacterStage`).
+ * Under the HUD has nothing else fighting for the same space.
+ *
+ * `unlock-pop` plays it in once; there is no dismiss animation, because there
+ * is no programmatic dismiss any more - it stays until tapped, which unmounts
+ * it.
+ */
+.spotlight {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 100%;
+  margin-top: 8px;
+  z-index: 5;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 15px;
+  text-align: left;
+  background: var(--surface);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 0 var(--ink);
+  animation: unlock-pop 0.55s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+}
+
+/*
+ * A "get" moment rather than a plain slide-up: a one-shot light sweep behind
+ * the text, timed just after the pop settles. Runs once per skill (the
+ * button remounts per `key={shown.id}` in the component) and never repeats,
+ * matching this toast's own rule of appearing exactly once per discovery.
+ */
+.spotlight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    color-mix(in srgb, var(--product) 45%, #fff 45%) 50%,
+    transparent 60%
+  );
+  transform: translateX(-120%);
+  opacity: 0.8;
+  animation: unlock-shine 0.85s 0.2s ease-out both;
+  pointer-events: none;
+}
+
+/* Gold rather than the per-product hue - this is the "you got something"
+   mark, and gold is what reads as a pickup regardless of which product's
+   character found it. */
+.spotlight-mark {
+  position: relative;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  border: 1.5px solid var(--ink);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+}
+
+/* Two staggered rings expanding off the mark - the same "something just
+   arrived" grammar as `.stage-burst`, scaled down to toast size. */
+.spotlight-mark::before,
+.spotlight-mark::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gold-deep);
+  opacity: 0;
+  animation: unlock-ring 0.9s ease-out both;
+}
+
+.spotlight-mark::after {
+  animation-delay: 0.14s;
+}
+
+/* FE-R-12: tier legible without reading the label. The advanced tier keeps
+   its per-product ring, so gold ("a pickup") and the product hue ("this
+   product's advanced tier") stay visually distinct signals. */
+.spotlight[data-tier='advanced'] .spotlight-mark {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--product) 22%, transparent);
+}
+
+.spotlight[data-tier='advanced'] .spotlight-mark::before,
+.spotlight[data-tier='advanced'] .spotlight-mark::after {
+  border-color: color-mix(in srgb, var(--product) 65%, #fff 20%);
+}
+
+.spotlight-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spotlight-label {
+  font-family: var(--font-latin);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--product-ink);
+}
+
+.spotlight-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotlight-arrow {
+  flex: none;
+  color: var(--text-mute);
+  display: inline-flex;
+}
+
+.spotlight-arrow svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* --- input: voice first, text beneath --- */
+
+
+.input-bar {
+  flex: none;
+  padding: 0 18px calc(14px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feedback-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--tint);
+  border: 1.5px solid color-mix(in srgb, var(--product) 35%, transparent);
+  border-radius: 11px;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--product-ink);
+}
+
+.feedback-context-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-context .text-button {
+  flex: none;
+  color: var(--product-ink);
+  font-weight: 600;
+}
+
+.voice-bar {
+  position: relative;
+  width: 100%;
+  height: 54px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow: hidden;
+  transition:
+    background 220ms ease,
+    border-color 220ms ease;
+}
+
+.voice-bar[data-state='recording'] {
+  background: var(--tint);
+  border-color: var(--product);
+}
+
+.voice-bar[data-state='transcribing'] {
+  opacity: 0.7;
+}
+
+.voice-icon {
+  display: inline-flex;
+  color: var(--text-dim);
+}
+
+.voice-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.voice-label {
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+.voice-bar[data-state='recording'] .voice-label {
+  color: var(--product-ink);
+  font-weight: 600;
+}
+
+/* FE-R-22: input visualisation only. Nothing in this app plays audio. */
+.voice-wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+}
+
+.voice-wave i {
+  width: 2px;
+  border-radius: 2px;
+  background: var(--product);
+  height: 5px;
+  animation: equalize 0.85s ease-in-out infinite;
+}
+
+/* FE-R-20: the mic reports itself and nothing else is lost. The text row below
+   is untouched. */
+.voice-unavailable {
+  margin: 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-mute);
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.input-field input {
+  width: 100%;
+  background: #fff;
+  border: 2px solid var(--ink-soft);
+  border-radius: 999px;
+  padding: 10px 15px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  letter-spacing: inherit;
+}
+
+.input-field input::placeholder {
+  color: var(--text-mute);
+}
+
+.input-field input:focus {
+  outline: none;
+  border-color: var(--product);
+}
+
+.send-button {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: var(--text);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 3px 0 var(--ink);
+  transition: opacity 160ms ease, transform 100ms ease, box-shadow 100ms ease;
+}
+
+.send-button:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+.send-button svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.8;
+}
+
+.send-button:disabled {
+  background: var(--line);
+  color: var(--text-mute);
+  border-color: var(--line-2);
+  box-shadow: none;
+}
+
+.input-cap {
+  align-self: flex-end;
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+/* --- sheets: raised over the character, never a route --- */
+
+.sheet-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * The scrim leaves the character visible above the sheet. Browsing what it
+ * discovered happens in front of the thing that discovered it, which a
+ * full-bleed overlay lost.
+ */
+.sheet-scrim {
+  flex: 1;
+  min-height: 76px;
+  background: rgba(25, 24, 22, 0.14);
+  backdrop-filter: blur(2px);
+}
+
+.sheet {
+  flex: 0 0 auto;
+  max-height: 74%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 3px solid var(--ink);
+  border-bottom: none;
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -20px 44px -26px rgba(25, 24, 22, 0.55);
+  animation: sheet-rise 260ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+/* No `min-height`. An empty compendium should be a short sheet, not a tall one
+   with a single line floating in it - and FE-R-14 means empty is a real state
+   rather than a grid of placeholders that always fills the space. */
+.sheet-tall {
+  max-height: 84%;
+}
+
+.sheet-header {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 18px 18px 12px;
+}
+
+.sheet-grip {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 5px;
+  border-radius: 999px;
+  border: 1px solid var(--ink-soft);
+  background: var(--line);
+}
+
+.sheet-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 18px calc(22px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* --- conversation log --- */
+
+.log {
+  gap: 8px;
+}
+
+.bubble {
+  background: var(--surface);
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 16px;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 86%;
+  align-self: flex-start;
+  white-space: pre-wrap;
+  box-shadow: 0 2px 0 var(--line);
+}
+
+.bubble[data-role='user'] {
+  align-self: flex-end;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.bubble[data-kind='announcement'] {
+  background: var(--tint);
+  color: var(--product-ink);
+  font-weight: 500;
+}
+
+.bubble[data-kind='failure'] {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* --- compendium --- */
+
+.compendium-empty,
+.compendium-more {
+  margin: 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-mute);
+  padding: 4px 0;
+}
+
+.compendium-empty {
+  padding: 26px 0;
+}
+
+.skill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/*
+ * FE-R-12: tier at a glance - frame, mark and label together, because the
+ * tiering is part of the argument that more usage yields deeper
+ * personalization.
+ *
+ * FE-R-14: these frames belong to cards that exist. There is no grid with gaps
+ * and no locked entry, because N empty slots imply a predetermined catalogue.
+ */
+.skill-card {
+  position: relative;
+  background: var(--surface);
+  border: 2px solid var(--ink-soft);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 0 var(--line);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow: hidden;
+  /* Cards cascade in by list position instead of appearing at once - opening
+     the dex reads as a collection revealing itself. Capped at 8 slots so a
+     long list doesn't leave the last cards visibly waiting their turn. */
+  animation: card-cascade 0.4s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  animation-delay: calc(min(var(--i, 0), 8) * 45ms);
+}
+
+.skill-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--line);
+}
+
+.skill-card[data-tier='advanced'] {
+  border-color: color-mix(in srgb, var(--product) 40%, var(--ink) 15%);
+  box-shadow:
+    0 2px 0 var(--line),
+    0 0 0 3px color-mix(in srgb, var(--product) 10%, transparent);
+}
+
+.skill-card[data-tier='advanced']::before {
+  background: var(--product);
+}
+
+/* A single foil-style light pass once the card has settled - the advanced
+   tier catching the light once, not a looping shimmer that would compete
+   with the reason text for attention. */
+.skill-card[data-tier='advanced']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    color-mix(in srgb, var(--gold) 40%, transparent) 50%,
+    transparent 65%
+  );
+  transform: translateX(-140%);
+  opacity: 0;
+  animation: card-shine 0.9s ease-out both;
+  animation-delay: calc(min(var(--i, 0), 8) * 45ms + 480ms);
+  pointer-events: none;
+}
+
+.skill-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Part of FE-R-12's frame, not the text label it replaced: a faceted gem,
+   hollow silver for a basic skill and a filled gold gem for an advanced one -
+   the universal "common vs. rare loot" read. */
+.skill-tier-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  border: 1.5px solid var(--ink-soft);
+  background: transparent;
+}
+
+.skill-card[data-tier='advanced'] .skill-tier-mark {
+  border-color: var(--ink);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 24%, transparent);
+}
+
+.skill-name {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+/* FE-R-13: always visible, expanded, never clamped. This sentence is the
+   evidence that makes autonomous discovery witnessed rather than asserted. */
+.skill-reason {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+
+.skill-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+/* FE-R-16: the mark is the evidence that feedback revised the skill instead of
+   replacing it. Same id, same position, plus this. A faint pulse rather than
+   a static tag - it reads as a badge just earned, not a permanent label. */
+.revised {
+  color: var(--product-ink);
+  font-weight: 600;
+  background: var(--tint);
+  border-radius: 999px;
+  padding: 2px 8px;
+  animation: badge-glow 2.4s ease-in-out infinite;
+}
+
+.skill-card-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.primary-button,
+.secondary-button {
+  flex: 1;
+  border: 2px solid var(--ink);
+  border-radius: 11px;
+  padding: 11px;
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.primary-button {
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 3px 0 var(--ink);
+}
+
+.secondary-button {
+  background: var(--surface);
+  color: var(--text-dim);
+  box-shadow: 0 3px 0 var(--ink-soft);
+}
+
+/*
+ * A "sticker button" press rather than a hover-only state - these are tapped
+ * on a phone far more often than clicked, and the level-up/discovery
+ * reactions are already the app's silent stand-in for a "thunk" (FE-R-22: no
+ * audio). Pushing the button down onto its own bevel shadow reads as a
+ * physical press in a way a scale-down alone doesn't.
+ */
+.primary-button:active,
+.secondary-button:active {
+  transform: translateY(3px);
+  box-shadow: none;
+}
+
+/* --- motion --- */
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.9;
+    transform: translate(-50%, -58%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -58%) scale(1.04);
+  }
+}
+
+/* Bigger lift and a faster cycle than the first pass - at 7px/7s it barely
+   read as motion at all. */
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-16px);
+  }
+}
+
+/* Paired with `bob`, same duration and easing, so the two stay in phase. */
+@keyframes shadow-breathe {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateX(-50%) scale(0.7);
+    opacity: 0.4;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes glow {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* `.stage-slide`'s entrance: enters from the right when the switch moved
+   forward (next dot, or a leftward swipe), and mirrors from the left for
+   backward - see the direction note on `.stage-slide` itself. */
+@keyframes stage-slide-in-next {
+  from {
+    opacity: 0;
+    transform: translateX(46px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes stage-slide-in-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-46px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * A game-style level-up beat rather than a fade-in: rises from below with a
+ * small overshoot (14%-22%, the "pop"), holds while it's actually being read
+ * (22%-78%), then keeps floating upward as it fades rather than just
+ * vanishing in place. The horizontal offset is repeated at every step rather
+ * than factored out, for the reason on `.stage-levelup` above - a step that
+ * omitted it would silently reset it to centred for that frame.
+ */
+@keyframes levelup-rise {
+  0% {
+    opacity: 0;
+    transform: translateX(calc(-50% + 70px)) translateY(46px) scale(0.85);
+  }
+  14% {
+    opacity: 1;
+    transform: translateX(calc(-50% + 70px)) translateY(-4px) scale(1.06);
+  }
+  22% {
+    opacity: 1;
+    transform: translateX(calc(-50% + 70px)) translateY(0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translateX(calc(-50% + 70px)) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(calc(-50% + 70px)) translateY(-26px) scale(1);
+  }
+}
+
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes equalize {
+  0%,
+  100% {
+    height: 4px;
+    opacity: 0.45;
+  }
+  50% {
+    height: 20px;
+    opacity: 1;
+  }
+}
+
+@keyframes levelup-pop {
+  0% {
+    transform: scale(1);
+  }
+  22% {
+    transform: scale(1.09);
+  }
+  55% {
+    transform: scale(0.985);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Keeps the centring translate in every step. Dropping it would re-introduce the
+   same class of bug as the float-versus-pop collision: a keyframe that sets
+   `transform` replaces the whole property, offset included. */
+@keyframes levelup-burst {
+  0% {
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.9);
+  }
+}
+
+/* --- unlock / dex motion: the "something just arrived" grammar for the
+   spotlight toast and the compendium cards it leads to --- */
+
+/* An overshoot ease-out landing rather than a plain slide-up - the toast
+   arrives with a touch too much energy and settles, same idea as
+   `levelup-pop` but for something entering the screen instead of already on it. */
+@keyframes unlock-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.82);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.045);
+  }
+  80% {
+    transform: translateY(0) scale(0.99);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes unlock-shine {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes unlock-ring {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+@keyframes card-cascade {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes card-shine {
+  0% {
+    transform: translateX(-140%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(140%);
+    opacity: 0;
+  }
+}
+
+@keyframes badge-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--product) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--product) 14%, transparent);
+  }
+}
+
+/* The counter-gem badge's own arrival beat - a bigger overshoot than
+   `unlock-pop` because this one has no separate ring/shine to carry the
+   "something changed" read on its own. */
+@keyframes badge-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
