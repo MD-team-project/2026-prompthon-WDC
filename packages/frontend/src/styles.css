@@ -978,16 +978,33 @@ svg {
   pointer-events: none;
 }
 
-.speech-log-toggle {
+/* Sits in the balloon's own top-right corner rather than as a separate pill
+   above it - one less element floating over the character, and the history
+   is a property of what was just said, not a separate control on the stage. */
+.speech-balloon-history {
   pointer-events: auto;
+  position: absolute;
+  top: 6px;
+  right: 6px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 11px;
+  gap: 3px;
+  padding: 3px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--ink-soft);
+  background: var(--surface-2);
   color: var(--text-mute);
-  font-size: 10.5px;
+  font-size: 10px;
+}
+
+.speech-balloon-history svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .speech-echo {
@@ -1015,15 +1032,40 @@ svg {
   animation: rise 0.55s cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
 
+/* A real speech balloon (not a chat-thread bubble): background, rounded
+   frame. Still one caption, not a scrolling list - the shape reads as "the
+   character is saying this", which is a stronger version of the same read
+   the bare-text caption was going for. */
+.speech-balloon {
+  position: relative;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1.5px solid var(--ink-soft);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 0 var(--line);
+  /* Extra top/right room for .speech-balloon-history in the corner. */
+  padding: 10px 46px 10px 16px;
+}
+
 .speech-caption[data-kind='announcement'] {
   color: var(--product-ink);
   font-weight: 600;
+}
+
+.speech-balloon[data-kind='announcement'] {
+  background: var(--tint);
+  border-color: color-mix(in srgb, var(--product) 40%, var(--ink) 15%);
 }
 
 /* FE-R-17 request class: the character reporting it, styled apart from ordinary
    speech but still in its own voice. */
 .speech-caption[data-kind='failure'] {
   color: var(--danger);
+}
+
+.speech-balloon[data-kind='failure'] {
+  background: var(--danger-bg);
+  border-color: var(--danger);
 }
 
 .speech-caption-idle {
@@ -1561,8 +1603,9 @@ svg {
 .sheet-scrim {
   flex: 1;
   min-height: 76px;
-  background: rgba(25, 24, 22, 0.14);
-  backdrop-filter: blur(2px);
+  background: rgba(25, 24, 22, 0.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .sheet {
