@@ -1,0 +1,18 @@
+{
+  "name": "@prompthon/device-stub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@prompthon/shared": "*",
+    "express": "5.0.1"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.0"
+  }
+}
