@@ -44,8 +44,21 @@ Opt-in questions are presented in `aidlc-docs/inception/requirements/requirement
 ### INCEPTION PHASE
 - [x] Workspace Detection
 - [ ] Reverse Engineering (SKIPPED - greenfield, no existing code)
-- [x] Requirements Analysis (requirements.md generated, awaiting approval)
-- [ ] User Stories (assessed: SKIP by default per Lean choice; offered as an option at the requirements approval gate)
+- [x] Requirements Analysis (APPROVED 2026-08-20T02:22:47Z; requirements.md merged to main via PR #4)
+- [x] User Stories (APPROVED 2026-08-20T03:31:18Z after 4 revisions. 9 stories, 2 personas)
+- [x] Workflow Planning (**APPROVED** 2026-08-20T04:26:14Z, execution-plan.md rev 5)
+- [x] Application Design - **collapsed to a short decision record, awaiting approval**. Detailed interface contract discarded 2026-08-20T07:14:09Z
+- [x] Units Generation - **COMPLETE and APPROVED** 2026-08-20T07:41:33Z, minimal depth. 3 units: INFRA, BE, FE. Planning questions skipped as already answered by prior stages
+
+### CONSTRUCTION PHASE - WAITING, runs per unit in parallel
+- [ ] INFRA: Functional Design -> Code Generation
+- [ ] BE: Functional Design -> Code Generation
+- [ ] FE: Functional Design -> Code Generation
+- [ ] Build and Test - joint, after all three units
+
+**How each owner starts**: on their own branch, open a session and say
+`AI-DLC Construction, {INFRA|BE|FE} 담당` .
+The agent reads `aidlc-state.md` for that unit's scope and constraints, then runs Functional Design followed by Code Generation.
 - [ ] Workflow Planning
 - [ ] Application Design (not yet assessed)
 - [ ] Units Generation (not yet assessed)
@@ -66,10 +79,27 @@ Opt-in questions are presented in `aidlc-docs/inception/requirements/requirement
 - **Quality bar**: Hackathon demo that must survive a live run. Timeline 1-2 days. Lean workflow.
 - **Undecided pending Round 2**: demo-critical slice, product/character count, persistence, auth, voice input path, usage-data source, control realism, hosting, UI shape, language, exp reward mechanic.
 
+## Working Conventions
+- **Conversation language**: Korean. **Document language**: English. Set by user directive 2026-08-20T02:29:15Z. Applies to all AI-DLC artifacts from this point forward.
+- Independent of the product's own UI language, which is Korean-first with an English toggle per Round 2 Q14.
+- User answers questions in chat; the AI transcribes them verbatim into the relevant question file, which remains the artifact of record.
+
 ## Settled Decisions
 - **Products**: Pra.L (beauty), ShoeCase (life/niche), Massage Chair (wellness). One agent and one character each.
 - **Pillar depth**: Skill Discovery DEEP and autonomous and primary; Character Progression THIN and presentation-led; Agentic Control BASELINE.
-- **Stack**: TypeScript/Node, LangGraph with LangChain v1 `createAgent` plus middleware, Bedrock, Polly, browser Web Speech API.
+- **Stack**: TypeScript/Node, LangGraph with LangChain v1 `createAgent` plus middleware, DynamoDB, **Amazon Transcribe** (streaming, server-side). **Two models split by responsibility** (rev 2026-08-20T05:14:22Z): **Bedrock** for Agentic Control via `ChatBedrockConverse`, **EXAONE via Friendli** for Skill Discovery and product-stat governance via `ChatOpenAI` with overridden `baseURL`. **Polly removed** 2026-08-20T03:04:52Z (replies text only); **Transcribe replaced browser Web Speech API** 2026-08-20T03:14:36Z.
+- **Consequence of the model split**: Bedrock returns, so the AWS surface is Bedrock + DynamoDB + Transcribe and the AWS-central posture is restored.
+- **Layer separation (2026-08-20T05:26:03Z)**: Agentic Control is **interactive and live** on the request path; Skill Discovery is **background and async**, off it entirely. Discovery never blocks an interaction. Trigger is **accumulated data volume crossing a threshold**, tuned low enough that a few demo interactions cross it.
+- **Data classification (2026-08-20T05:26:03Z)**: boundary is **sensitivity, not kind**. *Sensitive* = accumulated usage history, derived routines, skill provenance → **EXAONE only**, never logged, never sent raw to the client. *Open* = current device state, capability list, character level and exp → **Bedrock direct**. Enforced structurally by two separate data modules, so the Bedrock tool set simply never imports the usage-history module. Consequence: no model-calling-a-model penalty on the interactive path.
+- **EXAONE is now entirely off the interactive path**, so thinking mode is simply on with no latency cost anywhere. The thinking-mode question was withdrawn rather than answered.
+- **Architecture (rev 3)**: strict 1:1:1 binding of agent, character, and device. Three products means three agents, each with its own state - no multiplexing. The agent reaches its device over an **API**, not shared memory; `DeviceAdapter` is that API's client.
+- **Data paths (rev 5, separated by purpose)**: **Runtime flow** - device API to agent to UI, synchronous, current device state **not persisted**. **Accumulation flow** - device API buffers usage events in memory, flushes to DynamoDB, clears; this exists for **Skill Discovery** to analyse later. All actions connect directly to the device API. Flush-before-read (former FR-5.8) **removed** - the display no longer reads flushed state, which eliminated the staleness window entirely.
+- **DynamoDB purpose (rev 5)**: **primary** = usage-event accumulation for Skill Discovery. **secondary** = character state, level, exp, skills, feedback log. **Not** current device state.
+- **The FR-5.5 invariant (rev 5)**: located in **payload provenance**, not the storage path. Stats reach the UI as a structured device API response the agent forwards rather than authors. A model can write a sentence but cannot fabricate a structured device response. Observable test: have the device clamp 30 minutes to 25 and confirm the UI shows 25, not 30.
+- **UI model (rev 2)**: the character IS the device UI. Device state renders as character stats; no device control panel exists. Level, exp, and skill list all live on the main character UI.
+- **Progression mechanic (rev 2)**: discovery triggers a level-up presentation. Level does NOT gate skills - skills are usable immediately. The user reads the level-up as having earned the skill, which is the intended illusion.
+- **Skill tiers (rev 2)**: 14 days of history yields basic skills, 60 days yields advanced skills.
+- **Channels (rev 2)**: request by voice or text, response always text.
 - **Storage**: JSON fixtures for usage history; DynamoDB for progression, skills, device state, feedback; in-memory LangGraph checkpointer for conversation; audio not persisted.
 - **Auth**: none, one hardcoded demo user. Conditional passcode NFR if ever deployed publicly.
 - **Hosting**: local first, EC2 only if time remains.
@@ -77,8 +107,89 @@ Opt-in questions are presented in `aidlc-docs/inception/requirements/requirement
 - **Progression rewards**: skill unlocks at thresholds plus cosmetic evolution. No personality or tone change by level.
 - **Workflow shape**: Requirements Analysis, Workflow Planning, Functional Design, Code Generation, Build and Test. NFR Design and Infrastructure Design skipped. User Stories skipped by default.
 
+## Team Structure
+**3 people working in parallel**: Infra, BE, FE. Set by user directive 2026-08-20T03:42:55Z. Wall clock stays 1.5 days; capacity roughly 36 person-hours. The binding constraint moves from total hours to **interface contracts and integration**.
+
+## Execution Plan Summary (revision 2, 3-person parallel)
+- **Stages to execute**: Application Design (contracts), Units Generation (3 units), Functional Design x3 in parallel, Code Generation x3 in parallel, Build and Test (integration)
+- **Stages to skip**: Reverse Engineering (greenfield), NFR Requirements (NFRs already fixed), NFR Design (dependent on skipped stage), Infrastructure Design (localhost, deployment conditional - note the Infra *stream* still has substantial unit-level work)
+- **Units (rev 3)**: INFRA (IaC and environment ONLY - AWS resources, IAM, env config, deployment, integration harness; owns zero stories, an enabling unit), BE (device API **stub**, flush cycle, 3 agents, discovery engine, skill lifecycle, Transcribe endpoint, app API, tiered fixture), FE (UI, stats as character, progression presentation, audio capture, i18n)
+- **Contracts frozen before streams split (rev 3, reduced to 2 cross-team + shared types + env)**: DynamoDB schema (INFRA→BE), application API (BE→FE), shared types (all), environment contract (INFRA→all). Device API contract is now internal to BE
+- **SCAFFOLDING PHASE (2026-08-20T06:52:14Z)**: this phase builds three components, the seams between them, and enough behaviour to prove the seams work. **Product-specific data and tools are deferred to a later phase.**
+  - `device-stub` is a **canned-response server**, not a simulator. No state machine, no clock, no lifecycle event emission.
+  - **Skill Discovery over raw device data remains the CORE deliverable of this phase.** Device data is raw data; discovering skills from it is the point. The canned stub supplies **generic raw usage events**, which is all discovery needs to find patterns, synthesise, validate, persist and announce.
+  - **Deferred is product-AUTHENTIC data**, not usage data as such: what a real Pra.L or ShoeCase session looks like, realistic per-product rhythms, real capability vocabulary, real `attributes` keys, event vocabulary and emission points, device time model, product-specific agent tools.
+  - What this phase must also get right is what is expensive to change later: contract shapes, access classes, layer separation, model wiring.
+- **SUPERSEDED - the two-phase INFRA role (option A, decided 04:18)**. Its premise was INFRA absorbing the device stub and the product-authentic fixture; the stub is now roughly an hour and the authentic fixture is out of scope. INFRA phase 1 (hours 0-4, IaC and environment, not interruptible) still stands.
+- **OPEN DECISION - INFRA slack**: INFRA ~3 h, BE ~8-9 h, FE ~8-9 h. BE stays heaviest because the discovery pipeline did not shrink; only the simulator and authentic-data authoring left. Options: (A) INFRA joins whichever stream is behind after hour 4, (B) INFRA absorbs the canned stub at hour 2 to buy BE an extra hour on discovery, (C) accept INFRA idling.
+- **Success criteria UNCHANGED.** A brief claim that this phase could no longer demonstrate autonomous discovery was wrong and has been withdrawn. Generic raw events are sufficient. Only how *convincing* the discovered skill looks differs from the eventual product; the pipeline is the same.
+- **Caution (corrected 2026-08-20T04:02:33Z)**: FR-5.5 does NOT forbid the agent reading stats or causing them to change - it forbids the UI sourcing displayed stats from the agent's reply text. The agent is simply not the source of truth for the display. With BE owning both the device stub and the agent, the risk is that the display gets wired to the same in-process object the agent mutates, bypassing the commit path, so the UI shows intent rather than committed state. Ownership separation never enforced this; it only made the shortcut inconvenient. **Build and Test verification**: suppress the flush and confirm the UI fails to update rather than optimistically showing the agent's intent.
+- **Risk level**: High (raised from Medium-High). Top driver is now **integration at the seams**, then the 1.5 day wall clock, generative behaviour in the primary pillar, BE overload, Transcribe fragility, load-bearing fixture
+- **Two mandatory integration checkpoints**: 5.5h (thin end-to-end) and 9.0h (full demo path). The 5.5h one is the single most important line in the plan
+- **Drop order if time runs short**: voice input, then cosmetic evolution, then English toggle
+
 ## Next Step
-Awaiting approval of `aidlc-docs/inception/requirements/requirements.md`. On approval, proceed to Workflow Planning, unless the user elects to add the User Stories stage.
+**INCEPTION complete and approved. CONSTRUCTION is WAITING for the three owners to start in parallel.**
+
+Before anyone writes code, run the four first-hour verifications. The first one can invalidate BE's architecture:
+1. **Tool calling on the *dedicated* Friendli endpoint.** Failure means rework, not adjustment. Documentation found covers serverless endpoints only.
+2. `modelKwargs` passthrough actually reaches Friendli rather than being silently dropped.
+3. Thinking output shape - inline in content or a separate field. Determines the sanitiser.
+4. Whether `seed` is honoured. If it is, discovery reproducibility gets much easier.
+
+## Working Conventions for Parallel Construction (2026-08-20T07:34:07Z)
+- **Branching**: each unit on its own branch, PR, review, merge.
+- **Shared file conflicts**: `aidlc-state.md` and `audit.md` stay shared and **one person resolves conflicts as they arise**. No file splitting, no per-unit audit logs. `audit.md` is append-only so resolution is mechanical.
+- **Construction artifacts** land under `aidlc-docs/construction/{unit}/`, which does not overlap between units.
+- **FE must mock the backend including a fake SSE stream.** Without it FE waits on BE and roughly a third of team capacity idles for most of the build. Identified as the single most consequential item in the dependency document.
+
+## Application Design Outcome (rewritten 2026-08-20T07:14:09Z)
+
+**The detailed interface contract was discarded by user decision.** Files removed: `components.md`, `component-methods.md`, `services.md`, `component-dependency.md`. Everything now lives in a single short `application-design.md`. `be-reference-discovery-workflow.md` retained as BE's non-binding notes.
+
+**The only interface decisions made at this stage:**
+- **FE to BE: REST API plus SSE.** REST for user-initiated actions, SSE for unprompted agent pushes such as a discovery announcement.
+- **Stubbing: `device-stub` serves device data.** BE builds it, canned responses, and it is the source of the generic raw usage events discovery analyses.
+- **Route names, payload shapes, SSE event names and the storage schema are settled by FE and BE directly during Construction.** Not fixed in Inception - two people agreeing, not three-way coordination.
+
+**INFRA scope**: provide what BE needs and prepare IaC so later deployment is easy. Slack resolved as **option A** - IaC first since it unblocks the others, then join whichever stream is behind.
+
+**Constraints that still bind** (from requirements, not negotiable locally): EXAONE for discovery and sensitive data with Bedrock for control; the `ChatOpenAI` wrapper with `modelKwargs`; thinking output never shown as speech; stats from structured device responses; sensitive data never crossing to the client; discovery off the request path; server-side model credentials; text-only replies; Korean default with English toggle.
+
+**Interface evolution policy (2026-08-20T07:22:51Z)**: **fix the transport only, evolve everything above it.**
+- **Fixed at Inception**: REST for user-initiated FE→BE, SSE for server-initiated BE→FE, HTTP JSON for BE→`device-stub`, canned responses in `device-stub`. That is the entire interface commitment.
+- **Not fixed, deliberately**: route paths, payload shapes, SSE event names, storage schema and keys, error response shapes.
+- **How they get settled**: FE and BE agree directly and incrementally during Construction and revise as they learn. No artifact, no change control, no sign-off.
+- **Rationale**: fixing payloads in Inception means guessing before either side has written code, and every guess costs a renegotiation to correct. Deciding while building means each shape is set by whoever has just discovered what it needs to be.
+- **What this does NOT loosen**: the requirement-level constraints. A payload shape can change freely; which class of data may be in it cannot.
+- **The practice that makes it work**: integrate thinly and early. The hour-5.5 checkpoint stops being a formality and becomes the mechanism.
+
+## Phase Structure (2026-08-20T07:14:09Z)
+```
+NOW:    Scaffolding      Inception (this) -> Construction
+LATER:  Per product      Inception -> Construction, per product
+                         product-specific state, capabilities, tools, authentic data
+```
+The scaffolding phase exists to make later per-product phases cheap: once the pipeline runs end to end, adding a product should be data and tools rather than architecture.
+
+## MANDATORY CONSTRAINT - EXAONE via Friendli (2026-08-20T04:52:07Z)
+Hackathon requirement. **EXAONE is the required model**, text input only, served over Friendli's OpenAI-compatible chat/completions at `api.friendli.ai/dedicated/v1`.
+- **Bedrock removed from the runtime.** AWS surface narrows to DynamoDB and Transcribe.
+- **Wrapped as `ChatOpenAI` with `baseURL` overridden** - no custom LangChain integration needed, so `createAgent`, middleware, tool binding, and the LangGraph discovery workflow all work unchanged. Single construction site at `packages/backend/src/model/exaone.ts`.
+- **`chat_template_kwargs` goes through `modelKwargs`**, since it is not an OpenAI parameter.
+- Two instances: `exaoneChat` (thinking off, control path), `exaoneReasoning` (thinking on, discovery).
+- **Voice unaffected** - Transcribe converts speech to text before the model sees it.
+- **Access mediation specified**: EXAONE mediates *access*, does not *author* values. No direct data endpoint for the browser; data reaches the client as structured tool-call results carried alongside the prose, and the UI renders from the structured part. This reconciles the constraint with FR-5.5.
+- **First-hour verification, 4 items**: tool calling on the *dedicated* endpoint (documentation found covers serverless only - failure here means rework), `modelKwargs` passthrough, thinking-output shape, and whether `seed` is honoured.
+- **NFR-4.1 conflict**: determinism as written is unachievable with LLM-based discovery. Restatement pending Q12.
+
+## Requirements Gaps Found During Application Design Planning
+Two things no requirement specifies, raised as questions rather than assumed:
+1. **Announcement transport** - FR-3.6 requires an unprompted announcement, so the browser must learn of a server-side event it did not request. No requirement says how.
+2. **Discovery trigger** - FR-3.2 says a run completes without intervention once started, but nothing says what starts it.
+
+## Timeline Correction
+Build window is **1.5 days**, not the 1-2 days `requirements.md` was written against. Corrected by the user at 2026-08-20T02:36:41Z. Story scope was tightened accordingly; the same correction should inform Workflow Planning and Code Generation scope.
 
 ## Session History
 - **2026-08-19T07:27:43Z** - Session 1: Workspace Detection completed, Requirements Analysis started, stopped at Step 6 gate.

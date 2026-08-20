@@ -64,8 +64,8 @@ This is the central scoping decision and it governs how build effort is allocate
 - **FR-1.1** A user shall control any in-scope product by stating intent in natural language, via text or voice, without using a settings form. Example: "dry my shoes for thirty minutes".
 - **FR-1.2** The system shall expose a set of tools per product covering that product's primary capabilities, sufficient for the agent to satisfy ordinary requests.
 - **FR-1.3** The agent shall resolve a stated intent into one or more concrete device commands and apply them through the device layer.
-- **FR-1.4** The UI shall reflect resulting device state after every command, so the effect of an instruction is visible rather than merely described.
-- **FR-1.5** Each product shall maintain its own device state independently: power, mode, and any active timers.
+- **FR-1.4** *(REVISED 2026-08-20T03:04:52Z)* The UI shall reflect resulting device state after every command, so the effect of an instruction is visible rather than merely described. Device state shall be rendered **as character stats**, read from the device layer rather than from the agent's reply text. No separate device control panel shall exist anywhere in the interface.
+- **FR-1.5** *(REVISED 2026-08-20T05:58:41Z)* Each product shall maintain its **own** device state independently, and state changes to one product shall not affect another. **The state shape is per-product and not fixed system-wide** - beyond power, which is common to all three, each product exposes whatever attributes it actually has. Superseded text: "power, mode, and any active timers", which implied a single shape across three products that do not share one.
 - **FR-1.6** Multi-step planning, clarifying counter-questions, scheduling, conditional actions, and cross-device orchestration are explicitly **out of scope** for this pillar.
 
 ### FR-2: Character Progression (thin, presentation-led)
@@ -73,7 +73,7 @@ This is the central scoping decision and it governs how build effort is allocate
 - **FR-2.1** Each character shall hold an experience value and a level derived from it.
 - **FR-2.2** Interacting with a product shall increase its character's experience.
 - **FR-2.3** Crossing a level threshold shall be visible in the UI at the moment it happens, not merely on a later screen.
-- **FR-2.4** Level shall gate availability of discovered skills, per FR-3.7. This is the mechanism tying progression to the primary pillar.
+- **FR-2.4** *(REVISED 2026-08-20T03:04:52Z - causality reversed)* Discovery of a skill shall trigger a level-up presentation on the main character UI. Level shall **not** gate availability of skills; a discovered skill is usable the moment it exists. From the user's perspective the level-up appears to be what earned the skill, and that reading is the intended effect. Original text, superseded: "Level shall gate availability of discovered skills, per FR-3.7."
 - **FR-2.5** Level shall drive cosmetic evolution of the character's appearance.
 - **FR-2.6** Level shall **not** alter the character's personality or conversational tone. Explicitly excluded by the user (Q15 chose A and C, not B).
 - **FR-2.7** Progression state shall survive process restart.
@@ -96,19 +96,34 @@ This is the central scoping decision and it governs how build effort is allocate
 ### FR-4: Voice
 
 - **FR-4.1** A user shall be able to speak to a character and hear it reply.
-- **FR-4.2** Speech shall be transcribed to text in the browser and submitted to the agent identically to typed input. The agent shall be text-in and text-out, and shall never handle audio.
-- **FR-4.3** Agent text output shall be rendered to speech and played back to the user.
+- **FR-4.2** *(REVISED 2026-08-20T03:14:36Z)* Speech shall be captured in the browser and streamed server-side to **Amazon Transcribe**, and the resulting text submitted to the agent identically to typed input. The agent shall be text-in and text-out, and shall never handle audio. Original text, superseded: "Speech shall be transcribed to text in the browser".
+- **FR-4.3** *(REMOVED 2026-08-20T03:04:52Z)* Agent replies shall always be presented as **text**. Speech synthesis is removed from the response path, which removes Amazon Polly from the runtime. Input remains flexible (voice or text); output is text only. Original text, superseded: "Agent text output shall be rendered to speech and played back to the user."
 - **FR-4.4** Voice shall degrade to text without loss of capability. If speech input or audio output is unavailable, the text path shall remain fully functional, since text is the primary path.
 
 ### FR-5: Device layer
 
-- **FR-5.1** All device interaction shall pass through a single `DeviceAdapter` interface exposing capability enumeration, state retrieval, and command application.
+- **FR-5.1** *(REVISED 2026-08-20T03:14:36Z)* All device interaction shall pass through a single `DeviceAdapter` interface exposing capability enumeration, state retrieval, and command application. The adapter shall be a **client of a device API** rather than an in-process module sharing memory with the agent. For the local build the device API may be served by routes within the same application, but the boundary shall be a real request boundary.
 - **FR-5.2** A mock adapter shall be the only implementation built. No ThinQ adapter shall be written, and none shall be stubbed.
 - **FR-5.3** The capability vocabulary used by skill generation shall be enumerated through the adapter rather than hardcoded, satisfying FR-3.4.
+- **FR-5.9** *(NEW 2026-08-20T05:26:03Z)* **Agentic Control and Skill Discovery shall be separate layers.** Control is interactive and live, on the request path. Discovery is **background and asynchronous**, off the request path entirely. A discovery run shall never block a user interaction.
+- **FR-5.10** *(NEW 2026-08-20T05:26:03Z)* A discovery run shall be triggered by **accumulated data volume** crossing a threshold, rather than by a user action, a page load, or a wall-clock timer. The threshold shall be low enough that a few interactions can cross it during a demo, since "the more you use it, the more it learns" is the claim being demonstrated.
+- **FR-5.11** *(NEW 2026-08-20T05:26:03Z)* Data shall be classified into two access classes, enforced by separate modules rather than by convention:
+  - **Sensitive** - accumulated usage history, derived routines and preferences, and discovered-skill provenance. Reachable **only through EXAONE**. Never logged, never sent raw to the client.
+  - **Open** - current device state, capability list, character level and experience. Reachable **directly by the Bedrock control agent**.
+  The boundary is sensitivity, not kind: one reading of current state reveals little, while accumulated history reveals a person's schedule.
+- **FR-5.4** *(NEW 2026-08-20T03:14:36Z)* Agent, character, and device shall be bound in a strict **1:1:1** relation. Three products means three agents and three characters, each holding its own state. A single agent multiplexing multiple devices is not permitted, because it would break the premise that each character learns its own product.
+- **FR-5.5** *(REVISED 2026-08-20T04:11:47Z - the invariant is relocated, not weakened)* Character stats shown in the UI shall be delivered as **structured data originating from a device API response**, and shall never be derived from model-generated text. Runtime state travels device API to agent to UI directly; it does **not** round-trip through DynamoDB. Superseded twice: originally "read from the device over its API", then "read from DynamoDB".
+  - **Why this wording**: the earlier versions located the guarantee in the *storage path*, which was the wrong place. What actually prevents an agent reporting success while nothing changed is the **provenance and type of the payload** - a structured device response cannot be produced by a model writing a confident sentence. Where that payload is stored is irrelevant to the guarantee.
+- **FR-5.6** *(REVISED 2026-08-20T04:11:47Z - purpose changed)* The device API shall hold usage events in memory and periodically **flush** them to the application, which persists them to DynamoDB, then **clear** its buffer. The purpose of the flush is **accumulating usage history for Skill Discovery**, not serving the display. Superseded reasoning: the flush previously existed to make DynamoDB the source of truth for displayed state.
+- **FR-5.7** *(REVISED 2026-08-20T04:11:47Z)* Two distinct data flows exist, separated by purpose rather than by read versus write:
+  - **Runtime flow**: device API to agent to UI, synchronous. Current device state, command results.
+  - **Accumulation flow**: device API to DynamoDB via flush, asynchronous. Usage history that Skill Discovery later analyses.
+  All actions - commands, capability enumeration, skill invocation - connect directly to the device API.
+- **FR-5.8** *(REMOVED 2026-08-20T04:11:47Z)* Flush-before-read is no longer required and the requirement is withdrawn. It existed solely to stop the display showing stale flushed state, and the display no longer reads flushed state. Removing it also removes a staleness window and a synchronisation concern from the demo's most visible moment.
 
 ### FR-6: Usage history fixture
 
-- **FR-6.1** The system shall ship a seeded synthetic usage history of roughly sixty days per product, committed to the repository as fixture data.
+- **FR-6.1** *(REVISED 2026-08-20T03:04:52Z - now tiered)* The system shall ship a seeded synthetic usage history per product, committed to the repository as fixture data, structured in two tiers: **14 days sufficient to yield basic skills, and 60 days required to yield advanced skills.** Skill tier shall be distinguishable in the skill list. The tiering is itself part of the argument, since it demonstrates that more usage yields deeper personalization rather than merely asserting it.
 - **FR-6.2** The fixture shall be deterministic, so that a discovery run behaves identically on every execution.
 - **FR-6.3** **The fixture shall contain deliberate latent behavioural patterns for the agent to find.** This is a functional requirement rather than a data-preparation note: autonomous discovery can only surface structure that exists in the data, so uniformly random usage would cause the agent to correctly find nothing and the primary pillar to produce no visible result.
 
@@ -120,8 +135,8 @@ This is the central scoping decision and it governs how build effort is allocate
 
 ### FR-8: Localization
 
-- **FR-8.1** The interface shall default to Korean, with Korean speech output.
-- **FR-8.2** A toggle shall switch interface strings, agent output language, and speech voice to English.
+- **FR-8.1** *(REVISED 2026-08-20T03:04:52Z)* The interface shall default to Korean. Speech-output clause removed, since FR-4.3 no longer produces audio.
+- **FR-8.2** *(REVISED 2026-08-20T03:04:52Z)* A toggle shall switch interface strings and agent reply language to English. Speech-voice clause removed.
 - **FR-8.3** Agent output language shall be pinned by prompt instruction rather than by maintaining duplicate persona documents.
 
 ---
@@ -141,7 +156,8 @@ Both AWS baseline extensions are **disabled** and their rule files are never loa
 ### NFR-1: Security (lite guardrails)
 
 - **NFR-1.1** AWS credentials and API keys shall exist only in environment variables, never in source and never in the client bundle.
-- **NFR-1.2** All model calls shall be made server-side, so no model credentials reach the browser.
+- **NFR-1.2** *(AMENDED 2026-08-20T06:24:50Z to match FR-5.11)* All model calls shall be made server-side, so no model credentials reach the browser. This covers both `FRIENDLI_API_KEY` and AWS model access. Second obligation: **the browser shall have no direct data endpoint for the sensitive class** as defined in FR-5.11. Sensitive data reaches the client only as a summary produced through EXAONE.
+  - **Superseded wording**: "no direct data endpoint for device **or usage** data". That was written before FR-5.11 split data by sensitivity, and read literally it forbade serving current device state to the browser - which FR-5.11 classifies as open precisely because one current reading reveals nothing about behaviour. A read endpoint for current state is therefore permitted.
 - **NFR-1.3** Every chat and voice payload shall be validated and length-capped.
 - **NFR-1.4** User free text shall pass a prompt-injection guard before reaching the model. This applies to both ordinary chat and skill-revision feedback, because both shape what an agent that controls devices will do.
 - **NFR-1.5** Logs shall contain no personal data and no raw chat content.
@@ -149,7 +165,7 @@ Both AWS baseline extensions are **disabled** and their rule files are never loa
 
 ### NFR-2: Resiliency (lite guardrails)
 
-- **NFR-2.1** Every model and speech-synthesis call shall have a timeout and a single bounded retry.
+- **NFR-2.1** *(REVISED 2026-08-20T03:04:52Z)* Every model call shall have a timeout and a single bounded retry. The speech-synthesis clause no longer applies, per FR-4.3.
 - **NFR-2.2** A failed model call shall produce a visible graceful fallback. It shall never blank the screen.
 - **NFR-2.3** Progression and discovered skills shall be persisted at each change, so a mid-demo refresh loses no progress. Satisfied by the storage split in section 5.2.
 - **NFR-2.4** Seeded fixtures shall remain available as a fallback path if live cloud calls fail, so that venue network conditions cannot render the application inert.
@@ -160,7 +176,9 @@ Both AWS baseline extensions are **disabled** and their rule files are never loa
 
 ### NFR-4: Demo robustness
 
-- **NFR-4.1** Discovery shall be deterministic given the same fixture and feedback state, so a rehearsed demo behaves the same live.
+- **NFR-4.1** *(RESTATED 2026-08-20T05:34:18Z)* Discovery shall be **reproducible in shape**: the same fixture and feedback state shall yield skills of the same kind and trigger, though names and phrasing may vary. Model temperature shall be 0.1 to 0.3, not the sample call's 1.0. A previously computed run shall be retained and replayable if a live run produces a weak result during a demo.
+  - **Superseded text**: "Discovery shall be deterministic given the same fixture and feedback state." Unachievable once EXAONE became mandatory for discovery reasoning, since a language model offers no reproducibility guarantee even at temperature 0.
+  - **Note on cost**: the replay reserve is nearly free. FR-5.9 makes discovery background and asynchronous, so a run already persists its result - a retained run and a fresh run are the same artifact, and replay is a stored read rather than a mechanism built specially for the demo.
 - **NFR-4.2** No slow or non-deterministic generation shall sit on the critical path of a visible interaction. This is why character art is pre-generated rather than produced on level-up.
 
 ### NFR-5: Deployment (conditional)
@@ -178,14 +196,15 @@ Both AWS baseline extensions are **disabled** and their rule files are never loa
 |---|---|
 | Language | TypeScript / Node.js |
 | Agent framework | LangGraph with LangChain v1 `createAgent` and middleware. Graph state carries character progression; tools and middleware deliver control and discovery |
-| Model | Amazon Bedrock |
-| Speech synthesis | Amazon Polly |
-| Speech recognition | Browser Web Speech API |
+| Model | **Two models, split by responsibility** *(revised 2026-08-20T05:14:22Z)*. **Amazon Bedrock** for Agentic Control - conversation and device commands, via `ChatBedrockConverse` from `@langchain/aws`. **EXAONE via Friendli** for Skill Discovery and product-stat governance - mandatory hackathon requirement, OpenAI-compatible chat/completions at `api.friendli.ai/dedicated/v1`, accessed with `ChatOpenAI` and an overridden `baseURL`, text input only. Bedrock returns to the runtime, so the AWS surface is Bedrock, DynamoDB and Transcribe |
+| Speech synthesis | ~~Amazon Polly~~ **REMOVED 2026-08-20T03:04:52Z** - replies are text only |
+| Speech recognition | **Amazon Transcribe** (streaming, server-side). *Revised 2026-08-20T03:14:36Z from browser Web Speech API* |
+| Device access | HTTP API. `DeviceAdapter` is its client. 1:1:1 agent-character-device binding |
 | Cloud posture | AWS-central |
 | Hosting | Local first. EC2 only if time remains |
 | Auth | None. One hardcoded demo user owning all character state |
 
-**Known deviation from AWS-central**: Chrome's Web Speech API performs recognition on Google infrastructure, so speech audio leaves AWS. Accepted for the demo. Amazon Transcribe streaming is the consistent alternative if AWS-native purity becomes a judging criterion.
+**AWS deviation resolved 2026-08-20T03:14:36Z.** The stack previously sent speech audio to Google's recognition service via the browser Web Speech API, which was the one non-AWS element. Switching to Amazon Transcribe removes that deviation, so all speech, model, and storage processing now stays within AWS. Cost of the change is roughly 1-3 hours for browser audio capture plus a server-side streaming path, contained by FR-4.4 which keeps text as the primary path so a failure in the audio pipeline degrades the demo rather than ending it.
 
 ### 5.2 Storage split
 
@@ -196,7 +215,8 @@ Storage is deliberately split by purpose rather than unified, because the seven 
 | Seeded usage history | Committed JSON fixtures | Written once, read many, deterministic. Fixture data, not runtime state |
 | Character progression | DynamoDB | Must survive restart |
 | Discovered skills, provenance, revisions | DynamoDB | The primary pillar's output. Losing it would erase what the demo exists to show |
-| Device state | DynamoDB | Small, mutable |
+| Current device state | **Not persisted.** Device API memory, delivered to the UI through the agent | *Revised 2026-08-20T04:11:47Z.* Runtime state, no storage requirement |
+| Accumulated usage events | DynamoDB, appended by flush | **Primary purpose of DynamoDB.** Input to Skill Discovery, alongside the seeded fixture |
 | Feedback log | DynamoDB | Feeds subsequent discovery passes |
 | Conversation threads | LangGraph in-memory checkpointer | Losing chat scrollback on restart is tolerable; losing skills is not |
 | Speech audio | Not persisted | Streamed to the client |
