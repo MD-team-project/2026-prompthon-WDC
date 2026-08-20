@@ -19,6 +19,7 @@ import { isWeatherCondition } from "@prompthon/shared";
 /** One day's reading, without the date/timestamp the getter stamps on. */
 interface Reading {
   weather: WeatherCondition;
+  temperatureC: number;
   steps: number;
   distanceKm: number;
   screenTimeMinutes: number;
@@ -52,10 +53,10 @@ export const CONTEXT_SCENARIOS = ["rain", "walk", "screen", "clear"] as const;
 export type ContextScenario = (typeof CONTEXT_SCENARIOS)[number];
 
 const SCENARIOS: Record<ContextScenario, Reading> = {
-  rain: { weather: "rain", steps: 3_280, distanceKm: km(3_280), screenTimeMinutes: 194 },
-  walk: { weather: "clear", steps: 14_260, distanceKm: km(14_260), screenTimeMinutes: 62 },
-  screen: { weather: "cloudy", steps: 4_150, distanceKm: km(4_150), screenTimeMinutes: 268 },
-  clear: { weather: "clear", steps: 6_900, distanceKm: km(6_900), screenTimeMinutes: 88 },
+  rain: { weather: "rain", temperatureC: 24, steps: 3_280, distanceKm: km(3_280), screenTimeMinutes: 194 },
+  walk: { weather: "clear", temperatureC: 27, steps: 14_260, distanceKm: km(14_260), screenTimeMinutes: 62 },
+  screen: { weather: "cloudy", temperatureC: 22, steps: 4_150, distanceKm: km(4_150), screenTimeMinutes: 268 },
+  clear: { weather: "clear", temperatureC: 26, steps: 6_900, distanceKm: km(6_900), screenTimeMinutes: 88 },
 };
 
 function isScenario(value: string): value is ContextScenario {
@@ -140,6 +141,16 @@ export function patchDailyContext(
         return { error: `weather must be one of clear, rain, cloudy, snow` };
       }
       next.weather = value;
+      continue;
+    }
+    // Signed, unlike every other reading: -8°C is a real winter morning, where
+    // -8 steps is a caller bug. Same reason the others reject rather than clamp.
+    if (key === "temperatureC") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return { error: `${key} must be a finite number` };
+      }
+      next.temperatureC = numeric;
       continue;
     }
     if (key === "steps" || key === "screenTimeMinutes" || key === "distanceKm") {

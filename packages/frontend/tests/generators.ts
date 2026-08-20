@@ -109,6 +109,10 @@ export const readingNumber = (): fc.Arbitrary<number> =>
 export const dailyContext = (): fc.Arbitrary<DailyContextStats> =>
   fc.record({
     weather: fc.constantFrom('clear' as const, 'rain' as const, 'cloudy' as const, 'snow' as const),
+    // Signed, and wider than Seoul gets: the widget prints this as a headline
+    // figure, so a negative reading has to survive rounding rather than lose
+    // its sign somewhere between -1 and 0.
+    temperatureC: fc.double({ min: -30, max: 45, noNaN: true }),
     steps: fc.integer({ min: 0, max: 40_000 }),
     distanceKm: fc.double({ min: 0, max: 40, noNaN: true }),
     // 0 to a full day. 1440 is the only real cap on screen time.

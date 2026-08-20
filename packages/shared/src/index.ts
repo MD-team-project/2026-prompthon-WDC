@@ -96,9 +96,20 @@ export type SkillKind = "buff" | "action";
  * `date` is the LOCAL date, not the UTC slice of `observedAt` - "today's
  * steps" has to mean the user's today, and a KST early-morning reading would
  * land on yesterday under UTC.
+ *
+ * `temperatureC` is here and NOT on `AppContextEvent`, which is the one field
+ * that differs between today and a stored day. It is a display concern: the
+ * weather widget reads as a weather widget because it leads with a
+ * temperature, where `weather: "rain"` alone is a category. Discovery never
+ * needs it - it correlates on the CONDITION, and a degree value would only
+ * add a near-continuous dimension for it to find spurious patterns in. Adding
+ * it to `AppContextEvent` would also have made every seeded fixture row
+ * (`fixtures/app-context-*.jsonl`) missing a required field.
  */
 export interface DailyContext extends AppContextEvent {
   observedAt: string;
+  /** Degrees Celsius. Signed - winter readings are legitimately negative. */
+  temperatureC: number;
 }
 
 export function isWeatherCondition(value: string): value is WeatherCondition {

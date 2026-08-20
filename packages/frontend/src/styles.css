@@ -219,6 +219,7 @@ svg {
       0 0 0 1px rgba(255, 255, 255, 0.7) inset,
       0 30px 60px -22px rgba(25, 24, 22, 0.4);
   }
+
 }
 
 /* --- connection banner. FE-R-18: no close control. --- */
@@ -578,6 +579,35 @@ svg {
 .hud-button-wide {
   color: var(--text);
   justify-self: end;
+}
+
+/* Back and today's-readings share the grid's left cell. `.hud-button`'s own
+   `justify-self: start` does nothing inside a flex parent, so the pair is
+   packed here instead. */
+.hud-left {
+  justify-self: start;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* An emoji where the back button has an SVG, so it needs its own size - 16px
+   (the SVG size) renders an emoji noticeably smaller than a stroked icon of the
+   same box. */
+.hud-button-glyph {
+  padding: 0 8px;
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* Nothing to show yet, or the fetch failed. Still present, still named for a
+   screen reader - a control that vanishes on failure is indistinguishable from
+   one that never existed (FE-R-19). */
+.hud-button:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+  transform: translateY(2px);
 }
 
 .hud-id {
@@ -1157,18 +1187,7 @@ svg {
   box-shadow: 0 0 0 2px var(--bg);
 }
 
-/* --- today's readings and device state, one panel each --- */
-
-/* The stack owns the outer margin and the gap between the two panels, so
-   neither panel has to know what sits next to it. */
-.stat-stack {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0 18px 12px;
-  min-width: 0;
-}
+/* --- device state --- */
 
 .stat-panel {
   flex: none;
@@ -1183,34 +1202,217 @@ svg {
   box-shadow: 0 2px 0 var(--ink-soft);
 }
 
-.stat-stack > .stat-panel {
-  margin: 0;
-}
+/* --- today's readings: widget cards, behind the HUD's weather button --- */
 
 /*
- * Today's readings, visually the quieter of the two: a thinner border and a
- * flatter background. Not decoration - the device panel is the one whose values
- * were reported back by the appliance, and it should be the one that looks
- * authoritative. This panel is context the character reasoned FROM.
+ * Two columns, with screen time spanning both.
+ *
+ * The span is what keeps the DOM order honest. Widgets read
+ * weather -> movement -> screen (the signal the user did not choose, then what
+ * their body did, then what their phone did - the order the character reasons
+ * in, see the backend's shared instructions). A plain 2x2 would have left a
+ * hole beside screen time or forced the order to change to fill it.
  */
-.stat-panel-context {
-  border-width: 1.5px;
-  border-color: var(--line-2);
-  box-shadow: none;
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-  padding: 8px 12px;
+.context-widgets {
+  display: grid;
+  /*
+   * `minmax(0, 1fr)`, not `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, so the
+   * track refuses to shrink below its content's min-content width - one
+   * unbreakable string inside a card (the ring's goal line) was enough to push
+   * both tracks wider than the sheet and send the cards past its rounded edge.
+   * Zero as the floor lets the track win that argument instead.
+   */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 2px;
 }
 
-.stat-panel-context .stat-chip {
-  box-shadow: none;
-  padding: 6px 10px;
-  background: color-mix(in srgb, #fff 88%, transparent);
+.context-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 2px 0 var(--ink-soft);
+  /* A rounded card clips its own contents. Backstop rather than the fix - the
+     grid track floor above is what stops content overflowing in the first
+     place - but a figure escaping its card is the one failure here that looks
+     like a broken build rather than a tight fit. */
+  overflow: hidden;
 }
 
-/* Decorative, and sized so a missing emoji glyph leaves no gap worth noticing. */
-.stat-glyph {
-  margin-right: 4px;
+.context-widget-screen {
+  grid-column: 1 / -1;
+  /* Wide rather than tall: a full-width card with one figure in it should read
+     as a banner, not as a square with a lot of empty middle. */
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.context-widget-label {
+  flex: none;
   font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+/* --- weather widget --- */
+
+/*
+ * Temperature and condition side by side, not stacked.
+ *
+ * `flex: 1` so this block takes the height the grid row gives the card (the
+ * movement card is the taller of the two), and `align-items: center` then
+ * centres the pair in it rather than leaving them pinned under the label with
+ * dead space below.
+ *
+ * Wraps as a fallback: a long condition word in English next to a three-digit
+ * temperature is wider than half the sheet, and dropping to a second line is a
+ * better failure than pushing the card past the edge.
+ */
+.context-weather {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.context-temp {
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+/* Lighter than the figure so the number reads first, and non-selectable noise
+   is kept out of the tabular-numeral run. */
+.context-temp-mark {
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+/* Sized up from 12.5px and moved out from under the temperature: the condition
+   is half of what this card says, and at caption size beside a 34px figure it
+   read as a footnote to the temperature rather than the other half of it.
+   `--text` rather than `--text-dim` for the same reason. */
+.context-weather-condition {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.context-weather-glyph {
+  flex: none;
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* --- movement widget: two ring gauges --- */
+
+.context-rings {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.context-ring-cell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+/* The gauge and its figure share one grid cell, rather than the figure being
+   absolutely positioned over the gauge. Same result, but the cell keeps the
+   wrapper's height driven by the SVG instead of by an out-of-flow child. */
+.context-ring-wrap {
+  width: 100%;
+  max-width: 62px;
+  display: grid;
+  place-items: center;
+}
+
+.context-ring {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: auto;
+  /* Starts the sweep at 12 o'clock. Without this a dasharray begins at 3
+     o'clock, which reads as a gauge that is already part-filled at zero. */
+  transform: rotate(-90deg);
+}
+
+.context-ring-track,
+.context-ring-fill {
+  fill: none;
+  stroke-width: 4;
+}
+
+.context-ring-track {
+  stroke: var(--line);
+}
+
+.context-ring-fill {
+  stroke: var(--product);
+  stroke-linecap: round;
+  transition: stroke-dasharray 420ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+/* Centred inside the ring, so the figure and its gauge are one object rather
+   than a number with a decoration next to it. */
+.context-ring-value {
+  grid-area: 1 / 1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.context-ring-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* Wraps rather than holding one line. "목표 10,000걸음" is wider than the ring
+   it sits under, and forcing it onto one line is what made the card overflow -
+   two short lines cost nothing here, since the grid row stretches both cards to
+   the same height anyway. */
+.context-ring-goal {
+  font-size: 10px;
+  color: var(--text-mute);
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* --- screen-time widget --- */
+
+.context-duration {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* The ring sweep is the only motion here, and it is a transition rather than an
+   animation, so the global reduced-motion rule (which kills `animation`) does
+   not reach it. */
+@media (prefers-reduced-motion: reduce) {
+  .context-ring-fill {
+    transition: none;
+  }
 }
 
 .stat-panel-header {

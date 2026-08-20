@@ -17,7 +17,14 @@ import type {
 } from '@prompthon/shared';
 import { initialState, reducer, activeSkills, statsFor, unseenTotalExcept, type State } from '../src/state';
 import { isSendable, normalizeInput, resolveLabel } from '../src/pure';
-import { attributeLabel, attributeValue, contextChips } from '../src/strings';
+import {
+  attributeLabel,
+  attributeValue,
+  contextWidgets,
+  DISTANCE_GOAL_KM,
+  STEP_GOAL,
+  weatherGlyph,
+} from '../src/strings';
 
 const shoecase: Character = {
   id: 'shoecase',
@@ -368,32 +375,71 @@ describe('generic attribute rendering', () => {
 describe("today's context", () => {
   const rainyDay: DailyContextStats = {
     weather: 'rain',
+    temperatureC: 24,
     steps: 3_280,
     distanceKm: 2.394,
     screenTimeMinutes: 194,
     observedAt: '2026-08-21T09:00:00Z',
   };
 
-  it('formats each reading so it reads as the figure it is', () => {
-    const chips = contextChips({ ...rainyDay, steps: 14_260 }, 'ko');
-    const by = (key: string) => chips.find((c) => c.key === key)!;
+  /** Narrowing helper - the widgets are a union, so a lookup by key is not enough. */
+  const widgetsOf = (context: DailyContextStats, lang: 'ko' | 'en' = 'ko') => {
+    const widgets = contextWidgets(context, lang);
+    const weather = widgets.find((w) => w.kind === 'weather')!;
+    const movement = widgets.find((w) => w.kind === 'rings')!;
+    const screen = widgets.find((w) => w.kind === 'duration')!;
+    return { weather, movement, screen };
+  };
 
-    expect(by('weather').value).toBe('비');
+  it('formats each reading so it reads as the figure it is', () => {
+    const { weather, movement, screen } = widgetsOf({ ...rainyDay, steps: 14_260 });
+
+    expect(weather.degrees).toBe('24');
+    expect(weather.condition).toBe('비');
+
+    const [steps, distance] = movement.rings;
     // Grouped, because "14260 걸음" is a number and "14,260 걸음" is a day's walking.
-    expect(by('steps').value).toBe('14,260');
-    expect(by('steps').unit).toBe('걸음');
-    expect(by('distance').value).toBe('2.4');
-    expect(by('distance').unit).toBe('km');
+    expect(steps.value).toBe('14,260');
+    expect(steps.unit).toBe('걸음');
+    expect(distance.value).toBe('2.4');
+    expect(distance.unit).toBe('km');
+
     // 194 minutes is three and a bit hours, and that is how phone time is felt.
-    expect(by('screenTime').value).toBe('3시간 14분');
-    // No unit: "3시간 14분" already carries its own.
-    expect(by('screenTime').unit).toBeUndefined();
+    expect(screen.value).toBe('3시간 14분');
   });
 
   it('drops the hours part below an hour, in both languages', () => {
     const brief = { ...rainyDay, screenTimeMinutes: 48 };
-    expect(contextChips(brief, 'ko').find((c) => c.key === 'screenTime')!.value).toBe('48분');
-    expect(contextChips(brief, 'en').find((c) => c.key === 'screenTime')!.value).toBe('48m');
+    expect(widgetsOf(brief, 'ko').screen.value).toBe('48분');
+    expect(widgetsOf(brief, 'en').screen.value).toBe('48m');
+  });
+
+  it('fills the step ring at 10,000 and the distance ring at 3km', () => {
+    // The goals are what make the rings readable, so they are asserted rather
+    // than left to whatever the constants happen to be.
+    expect(STEP_GOAL).toBe(10_000);
+    expect(DISTANCE_GOAL_KM).toBe(3);
+
+    const half = widgetsOf({ ...rainyDay, steps: 5_000, distanceKm: 1.5 }).movement.rings;
+    expect(half[0].ratio).toBeCloseTo(0.5);
+    expect(half[1].ratio).toBeCloseTo(0.5);
+
+    // Past the goal the ring is full, not overflowing - the exact figure is
+    // printed beside it, so a second lap would say nothing and draw over the first.
+    const over = widgetsOf({ ...rainyDay, steps: 14_260, distanceKm: 10.4 }).movement.rings;
+    expect(over[0].ratio).toBe(1);
+    expect(over[1].ratio).toBe(1);
+  });
+
+  it('states a below-zero temperature as below zero', () => {
+    // A winter reading is the one case where the sign carries the whole meaning.
+    expect(widgetsOf({ ...rainyDay, temperatureC: -8.4 }).weather.degrees).toBe('-8');
+  });
+
+  it('gives the HUD button todayed weather as its icon', () => {
+    // The button that opens the sheet is labelled by the reading it stands for,
+    // so this glyph and the one inside the sheet have to be the same one.
+    expect(weatherGlyph('rain')).toBe(widgetsOf(rainyDay).weather.glyph);
   });
 
   it('is held once, not per character', () => {
