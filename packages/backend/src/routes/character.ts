@@ -3,6 +3,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import type { createAgent } from "langchain";
 import type { AgentReply, DeviceState, ProductId, SkillSummary } from "@prompthon/shared";
 import { getSkill, listSkills } from "../data/skills.js";
+import { deviceAdapter } from "../device/adapter.js";
 import { startSseStream, subscribe } from "./sse.js";
 
 type Agent = ReturnType<typeof createAgent>;
@@ -163,6 +164,14 @@ export function characterRouter(productId: ProductId, agent: Agent): Router {
 
   // No separate feedback endpoint: revision and deletion happen through the
   // chat turn itself, via the control agent's updateSkill/deleteSkill tools.
+
+  // Demo-only: the real chat flow only ever sees DeviceState riding inside a
+  // turn's `done`/`deviceState` SSE events (see FR-5.5's note in api.ts). The
+  // device-state demo screen has no chat turn to ride along with - it polls
+  // this instead to show the same real device-stub state directly.
+  router.get("/device-state", async (_req, res) => {
+    res.json(await deviceAdapter.getState(productId));
+  });
 
   // Persistent per-product subscription for background events (Skill
   // Discovery progress and results) that don't arrive inside a chat turn.
