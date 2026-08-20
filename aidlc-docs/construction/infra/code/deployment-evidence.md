@@ -82,7 +82,7 @@ ok 4 - template carries no secret material
 | 1 | rule 3 | Stack status | `CREATE_COMPLETE` |
 | 2 | EC2 rule 1 | Instance state, type, instance profile attached | `running`, `t3.small`, profile `...5FfIv3maSr3N` attached |
 | 3 | EC2 rule 4 | Security group inbound rules, read from the live API | `[]` — empty |
-| 4 | rule 4 | `dynamodb list-tables` | `[]` — **no placeholder table was created** |
+| 4 | rule 4 | `dynamodb list-tables` | `[]` at this point — no placeholder table. The real table was added later, see below |
 | 5 | — | Root volume | `Encrypted: true`, 20 GiB gp3 |
 | 6 | EC2 rule 5 | Management path actually works | `ssm describe-instance-information` → `PingStatus: Online`, agent `3.3.4624.0`. Not merely configured, reachable |
 | 7 | rule 5 / rule 6 | SSM parameter metadata, value suppressed | **ABSENT.** Expected: the operator has not created it yet. Blocks hosted-backend readiness only, not this deployment |
@@ -135,3 +135,35 @@ Runtime state: `planned` → `synthesized` → `diff-reviewed` → `deployed` �
 The account-deletion requirement is satisfied: `cdk bootstrap` and `cdk deploy`
 have both run to completion against the live account, so `infra/` is a verified
 reusable asset rather than an unapplied draft.
+
+---
+
+## DynamoDB added 2026-08-20T11:55:00Z
+
+A third `cdk deploy`, 44 s, `UPDATE_COMPLETE`. Diff contained exactly three things:
+the table, the role policy change, and one output. No other resource moved.
+
+**Why this does not contradict the earlier no-placeholder rule.** That rule existed
+because base keys are immutable, so provisioning before BE could mean committing to a
+wrong key. `prompthon-app` uses `pk`/`sk` as plain strings that encode no domain
+meaning, and a key that says nothing cannot be wrong later. The concern the rule
+protected against is absent here, so the table stops being a placeholder and becomes
+a real deliverable that unblocks BE immediately.
+
+| Check | Result |
+|---|---|
+| `describe-table` | `ACTIVE`, `KeySchema` = `pk` HASH + `sk` RANGE, `PAY_PER_REQUEST` |
+| Indexes | GSI `null`, LSI `null`. LSIs cannot be added after creation, so none was created by accident |
+| Write from the instance role | `put-item` succeeded |
+| Range query from the instance role | `query` with `begins_with(sk, "EVENT#")` returned 1 |
+| Cleanup | `delete-item` succeeded, table back to 0 items |
+| Grant scope | Read and write statements resolve to the table ARN only. No `dynamodb:*`, no wildcard resource |
+
+The smoke test ran on the host under instance-role credentials, so it proves the
+grant works in the place the backend will actually run, not just from an operator
+profile.
+
+Template assertions were updated with the table: one table, base keys asserted
+meaning-neutral, on-demand billing, no LSI, and every DynamoDB grant scoped to the
+table ARN. The obsolete "no DynamoDB placeholder" assertion was replaced rather than
+deleted, so the property under test moved from absence to shape. 5 tests, all pass.

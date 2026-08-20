@@ -21,10 +21,35 @@ test('no inbound path to the host: no ingress rule, no key pair', () => {
   }
 });
 
-// business-rules.md validation rule 4: the runtime-first deployment must prove
-// no placeholder table was created before BE supplied access patterns.
-test('no DynamoDB placeholder', () => {
-  assert.deepEqual(template.findResources('AWS::DynamoDB::Table'), {});
+// One table, and its immutable part carries no domain meaning. If a future edit
+// puts something like `deviceId` in the base key, changing it later means
+// replacing the table, so this asserts the neutrality rather than the names.
+test('single table with meaning-neutral base keys, on demand, no LSI', () => {
+  const tables = Object.values(template.findResources('AWS::DynamoDB::Table'));
+  assert.equal(tables.length, 1);
+  const [props] = tables.map((t) => t.Properties);
+  assert.deepEqual(props.KeySchema, [
+    { AttributeName: 'pk', KeyType: 'HASH' },
+    { AttributeName: 'sk', KeyType: 'RANGE' },
+  ]);
+  assert.equal(props.BillingMode, 'PAY_PER_REQUEST');
+  // LSIs cannot be added after creation, so an accidental one is unfixable.
+  assert.equal(props.LocalSecondaryIndexes, undefined);
+});
+
+test('table grants are scoped to the table, not to all of DynamoDB', () => {
+  // grantReadWriteData emits read and write as separate statements, so this
+  // checks every one of them rather than assuming a count.
+  const resources = Object.values(template.findResources('AWS::IAM::Policy'))
+    .flatMap((policy) => policy.Properties.PolicyDocument.Statement)
+    .filter((s: { Action: string | string[] }) => JSON.stringify(s.Action).includes('dynamodb:'))
+    .map((s: { Resource: unknown }) => JSON.stringify(s.Resource));
+
+  assert.ok(resources.length > 0, 'expected at least one DynamoDB statement');
+  for (const resource of resources) {
+    assert.doesNotMatch(resource, /"\*"/);
+    assert.match(resource, /AppTable/);
+  }
 });
 
 test('ssm:GetParameter is scoped to exactly one parameter and nothing else', () => {

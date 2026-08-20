@@ -1,4 +1,5 @@
-import { CfnOutput, Stack, StackProps } from 'aws-cdk-lib';
+import { CfnOutput, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
@@ -62,6 +63,22 @@ export class RuntimeStack extends Stack {
       }),
     );
 
+    // Keys are deliberately meaning-neutral. `pk`/`sk` are the only immutable
+    // decision here, and they encode nothing about the domain, so BE can settle
+    // item-key conventions in its own code and change them freely. `pk` holds a
+    // server-known owner rather than a client-supplied id, which keeps the
+    // usage-event range queries discovery needs on the base key - no GSI.
+    // Add GSIs later as query needs appear: one per deploy, CloudFormation
+    // refuses more than a single index change per stack update.
+    const table = new dynamodb.Table(this, 'AppTable', {
+      tableName: 'prompthon-app',
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    table.grantReadWriteData(role);
+
     const instance = new ec2.Instance(this, 'BackendHost', {
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
@@ -86,5 +103,6 @@ export class RuntimeStack extends Stack {
     new CfnOutput(this, 'InstanceId', { value: instance.instanceId });
     new CfnOutput(this, 'SecurityGroupId', { value: securityGroup.securityGroupId });
     new CfnOutput(this, 'BackendRoleArn', { value: role.roleArn });
+    new CfnOutput(this, 'AppTableName', { value: table.tableName });
   }
 }

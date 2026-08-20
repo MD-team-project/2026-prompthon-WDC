@@ -68,7 +68,10 @@ with Diagram(
             ],
             "Parameter Store\nSecureString",
         )
-        ddb = node(["diagrams.aws.database.Dynamodb"], "Amazon DynamoDB\nnot created")
+        ddb = node(
+            ["diagrams.aws.database.Dynamodb"],
+            "Amazon DynamoDB\nsingle table, pk / sk",
+        )
 
     exaone = node(["diagrams.onprem.client.Client"], "K-EXAONE API\nskill discovery")
 
@@ -79,4 +82,4 @@ with Diagram(
     ec2 >> Edge(label="chat, tool calling") >> bedrock
     ec2 >> Edge(label="skill discovery") >> exaone
     ec2 << Edge(label="api key") << param
-    ec2 >> Edge(style="dashed", color="grey") >> ddb
+    ec2 >> Edge(label="usage, progression, skills") >> ddb

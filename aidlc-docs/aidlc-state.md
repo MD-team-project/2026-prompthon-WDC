@@ -243,7 +243,7 @@ Opus also remains a good build-time tool for authoring persona prompts and fixtu
 | Security group | `sg-0715b9fa40c2c378d` — **zero inbound rules** |
 | Management | SSM Session Manager, agent `Online`. No key pair, no SSH port, IMDSv2 required |
 | Role actions | `ssm:GetParameter` (one exact parameter ARN), `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `transcribe:StartStreamTranscription` |
-| DynamoDB | **0 tables, deliberately.** Verified post-deploy |
+| DynamoDB | `prompthon-app`, `ACTIVE`. Keys `pk`/`sk` (String), on-demand, 0 indexes. Added 2026-08-20T11:55:00Z |
 | Bootstrap | `CDKToolkit` created. Account-level, dies with the account, must be re-run in any future account |
 
 **Bedrock IAM actions, corrected 2026-08-20T11:05:00Z.** An earlier version of this section claimed `bedrock:Converse` and `bedrock:ConverseStream` are not IAM action names. **That was wrong** — they exist. The rule depends on direction:
@@ -260,9 +260,13 @@ Removing them from the Allow policy was still correct, because there they grante
 
 **What BE needs from INFRA is now published.** Read `aidlc-docs/construction/infra/code/runtime-contract.md`.
 
-**DynamoDB handoff simplified 2026-08-20T11:10:00Z by user directive.** The earlier seven-field access-pattern contract (caller, operation, owner boundary, consistency, fields, result bound, RPS) is **withdrawn as over-process for a demo**. BE simply writes its data-access code against a table name from an environment variable; INFRA reads it and decides table count and keys. Capacity, encryption, Streams, TTL, PITR, deletion protection and removal policy take ordinary demo defaults and are not argued per table. `Scan` is acceptable at demo volume.
+**DynamoDB handoff simplified 2026-08-20T11:10:00Z, then resolved 2026-08-20T11:55:00Z, both by user directive.** The seven-field access-pattern contract (caller, operation, owner boundary, consistency, fields, result bound, RPS) was **withdrawn as over-process for a demo**. Then the table was **created up front** rather than waiting on BE at all.
 
-Two things still bind, both because they are expensive after the fact: **keys derive from a server-known owner, never a client-supplied identifier**, and **partition/sort keys are immutable** — changing one replaces the table. That immutability, and nothing else, is why provisioning waits for BE rather than guessing.
+**What made waiting unnecessary**: the only immutable part of a table is its base key, so a base key that encodes nothing cannot be wrong later. `prompthon-app` uses `pk`/`sk`, both String, carrying no domain meaning. Item-key conventions like `CHARACTER#pral` are BE's *data*, changeable at any time, not schema. So Question 5's original concern — that provisioning early means guessing immutable keys — does not apply to a meaning-neutral key.
+
+**Still binding**: `pk` holds a server-known owner, never a client-supplied id. Using an item's own id as `pk` would allow point lookups only and lose the usage-event range queries Skill Discovery depends on.
+
+**GSIs remain absent** and are added one per deploy when a lookup needs one — CloudFormation refuses more than a single index change per stack update. LSIs are excluded permanently since they cannot be added after table creation.
 
 **Friendli handoff to BE**: the actual `FRIENDLI_API_KEY` value is intentionally unread and unverified by INFRA. BE must confirm it in its own local environment and run the four first-hour checks below.
 

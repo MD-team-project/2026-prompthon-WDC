@@ -4,7 +4,7 @@
 
 1. INFRA provisions and configures AWS runtime resources; it does not implement agents, discovery, the device stub, application APIs, frontend behavior, or product fixtures.
 2. The Infrastructure Design stage remains skipped. This Functional Design records only behavior, handoffs, constraints, and acceptance conditions required for Code Generation.
-3. The initial deployment includes a minimal EC2 runtime but no placeholder DynamoDB table.
+3. The initial deployment included a minimal EC2 runtime and no placeholder DynamoDB table. **Superseded 2026-08-20T11:55:00Z**: the table now exists with meaning-neutral base keys, which is not a placeholder — nothing about it has to be guessed or corrected later.
 4. DynamoDB is added once BE's data-access code shows what it persists and how it reads it back. See the simplification note under DynamoDB Rules.
 5. No CI/CD platform, multi-account framework, custom construct library, S3, CloudFront, ECS, Lambda, API Gateway, or monitoring stack is added without a concrete requirement.
 
@@ -46,8 +46,10 @@ seven-field access-pattern contract from BE. That was over-process for a demo. *
 states what it uses DynamoDB for; INFRA decides table count and keys from that;
 everything else takes ordinary demo defaults.**
 
-1. **BE's only obligation is to say which data it persists and how it looks that data up.** Its repository code counts as the statement — no form, no separate document. INFRA derives table boundaries, keys, and any index from it.
-2. Table count and key design are INFRA's call, made from BE's stated usage. Table count is an output of that, not a preset target.
+**Resolved 2026-08-20T11:55:00Z**: rules 1 and 2 below are satisfied without any handoff. One table `prompthon-app` exists with meaning-neutral `pk`/`sk` base keys, so BE has nothing to supply before connecting. A base key that encodes nothing cannot become wrong, which removes the reason to wait. GSIs are still driven by real lookups.
+
+1. ~~**BE's only obligation is to say which data it persists and how it looks that data up.**~~ Now applies to **indexes only**. BE names a lookup that needs a GSI; INFRA adds it.
+2. ~~Table count and key design are INFRA's call, made from BE's stated usage.~~ Settled: one table, `pk`/`sk`. Revisit only if a real need appears.
 3. Current device state, conversation history, speech audio, and committed JSON fixtures are not stored in DynamoDB.
 4. Persisted scope is limited to accumulated usage events, character progression, discovered skills with provenance and revisions, and feedback.
 5. Everything not named above takes the ordinary demo default: on-demand capacity, AWS-owned encryption, no Streams, no TTL, no PITR, no deletion protection, CDK `DESTROY`. These are not re-litigated per table. BE overrides one only by naming a concrete need.
