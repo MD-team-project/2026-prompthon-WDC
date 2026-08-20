@@ -61,6 +61,47 @@ export function progressRatio(exp: number, expToNext: number): number {
   return Math.min(1, Math.max(0, exp / expToNext));
 }
 
+/** Cosmetic exp gain for an ordinary successful message. See `applyExpBump`. */
+export const MESSAGE_EXP_GAIN = 15;
+
+/** Cosmetic exp gain for a skill discovery. Bigger, since it is the rarer event. */
+export const DISCOVERY_EXP_GAIN = 40;
+
+/**
+ * Local, cosmetic-only progression bump for a successful interaction.
+ *
+ * BE (construction/be, PR #7) sends no progression data at all - no level, no
+ * exp, no curve - so a response's `progression` field is never populated by a
+ * real reply. `state.ts` falls back to this so the level/exp UI keeps moving
+ * instead of sitting dead, rather than because BE reported anything. Nothing
+ * produced here is ever presented as data BE stated as fact.
+ *
+ * Growth factor and gain amounts are arbitrary demo pacing, not a curve BE
+ * owns - contrast with `progressRatio`, which only ever renders numbers
+ * supplied to it.
+ */
+export function applyExpBump(
+  character: { level: number; exp: number; expToNext: number },
+  amount: number,
+): { level: number; exp: number; expToNext: number; leveledUp: boolean } {
+  const { level, exp, expToNext } = character;
+  if (!Number.isFinite(expToNext) || expToNext <= 0) {
+    // Nothing to fill toward - leave it exactly as it was rather than growing
+    // a curve BE never described.
+    return { level, exp, expToNext, leveledUp: false };
+  }
+  const nextExp = exp + amount;
+  if (nextExp < expToNext) {
+    return { level, exp: nextExp, expToNext, leveledUp: false };
+  }
+  return {
+    level: level + 1,
+    exp: nextExp - expToNext,
+    expToNext: Math.round(expToNext * 1.4),
+    leveledUp: true,
+  };
+}
+
 /**
  * The id `step` places away from `currentId`, wrapping at both ends.
  *

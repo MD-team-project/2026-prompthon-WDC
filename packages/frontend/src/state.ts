@@ -29,6 +29,7 @@ import type {
   Skill,
   SkillDiscoveredEvent,
 } from '@prompthon/shared';
+import { applyExpBump, DISCOVERY_EXP_GAIN, MESSAGE_EXP_GAIN } from './pure';
 
 export type SseStatus = 'connecting' | 'open' | 'dropped';
 export type View = 'roster' | 'character';
@@ -277,11 +278,19 @@ export function reducer(state: State, action: Action): State {
         ? { ...state.deviceStats, [characterId]: response.deviceState }
         : state.deviceStats;
 
-      const characters = response.progression
-        ? applyProgression(state.characters, characterId, response.progression)
+      // BE sends no progression at all (construction/be PR #7) - `response.progression`
+      // is mock-only. Absent it, a local cosmetic bump keeps the level/exp UI moving
+      // instead of freezing dead. See `applyExpBump`.
+      const currentCharacter = state.characters.find((c) => c.id === characterId);
+      const progression =
+        response.progression ??
+        (currentCharacter ? applyExpBump(currentCharacter, MESSAGE_EXP_GAIN) : null);
+
+      const characters = progression
+        ? applyProgression(state.characters, characterId, progression)
         : state.characters;
 
-      const levelUp = response.progression?.leveledUp
+      const levelUp = progression?.leveledUp
         ? { ...state.levelUp, [characterId]: true }
         : state.levelUp;
 
@@ -336,8 +345,14 @@ export function reducer(state: State, action: Action): State {
         ...state.skills,
         [event.characterId]: upsertSkill(state.skills[event.characterId], event.skill),
       };
-      const characters = event.progression
-        ? applyProgression(state.characters, event.characterId, event.progression)
+      // Same BE gap as `action/response`: a real discovery event carries no
+      // progression, so it falls back to a (bigger) local cosmetic bump.
+      const discoveryCharacter = state.characters.find((c) => c.id === event.characterId);
+      const progression =
+        event.progression ??
+        (discoveryCharacter ? applyExpBump(discoveryCharacter, DISCOVERY_EXP_GAIN) : null);
+      const characters = progression
+        ? applyProgression(state.characters, event.characterId, progression)
         : state.characters;
 
       // The announcement is appended regardless, so opening that character shows
@@ -354,7 +369,7 @@ export function reducer(state: State, action: Action): State {
           skills,
           characters,
           messages,
-          levelUp: event.progression?.leveledUp
+          levelUp: progression?.leveledUp
             ? { ...state.levelUp, [event.characterId]: true }
             : state.levelUp,
           discovery: discovered

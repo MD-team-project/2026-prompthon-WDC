@@ -73,7 +73,10 @@ export function App() {
       typeof MediaRecorder !== 'undefined' &&
       typeof navigator !== 'undefined' &&
       Boolean(navigator.mediaDevices?.getUserMedia);
-    if (!supported) {
+    // BE (construction/be PR #7) has no /api/transcribe route yet, so voice input has
+    // nowhere real to go in real-API mode - off regardless of what the browser supports.
+    const usingRealBackend = import.meta.env.VITE_USE_MOCK === 'false';
+    if (!supported || usingRealBackend) {
       dispatch({ type: 'mic/status', status: 'unavailable' });
     }
   }, []);
@@ -129,7 +132,25 @@ export function App() {
     dispatch({ type: 'message/sent', characterId, text, at: now() });
     api
       .sendMessage(characterId, text, skillId)
-      .then((response) => dispatch({ type: 'action/response', characterId, response }))
+      .then((response) => {
+        dispatch({ type: 'action/response', characterId, response });
+
+        if (skillId) {
+          // BE's /chat route never returns the skill it revised or deleted - that
+          // happens entirely inside the turn via the agent's own tools (see
+          // routes/skills.ts). Refetching is what actually gets the change to the
+          // compendium instead of it only existing inside BE's store.
+          api
+            .listSkills(characterId)
+            .then((skills) =>
+              dispatch({ type: 'character/detailLoaded', characterId, deviceStats: null, skills }),
+            )
+            .catch(() => {
+              // A compendium that is stale until the next natural refresh is not worth
+              // a second failure message stacked on a message that otherwise succeeded.
+            });
+        }
+      })
       .catch(() =>
         dispatch({ type: 'action/failed', characterId, text: t('error.request'), at: now() }),
       );

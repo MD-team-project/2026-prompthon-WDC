@@ -28,17 +28,16 @@ import type {
   Lang,
   Skill,
   SkillDiscoveredEvent,
-} from '@prompthon/shared';
-import type { ApiClient, EventHandlers, GetLang } from './api';
+} from "@prompthon/shared";
+import type { ApiClient, EventHandlers, GetLang } from "./api";
+import { CHARACTER_DEFAULTS } from "./characters";
 
 /** The device's own limit. The clamp the demo puts in front of judges. */
 const DEVICE_MINUTE_LIMIT = 25;
 
-const characters: Character[] = [
-  { id: 'pral', productId: 'pral', name: '프라엘', level: 2, exp: 40, expToNext: 100, artRef: 'pral/base' },
-  { id: 'shoecase', productId: 'shoecase', name: '슈케이스', level: 3, exp: 120, expToNext: 200, artRef: 'shoecase/base' },
-  { id: 'massagechair', productId: 'massagechair', name: '마사지체어', level: 1, exp: 10, expToNext: 60, artRef: 'massagechair/base' },
-];
+// Own mutable clone: this module writes through `character.exp` etc as its
+// in-memory store, and that must not reach back into the shared config.
+const characters: Character[] = structuredClone(CHARACTER_DEFAULTS);
 
 /**
  * Per-product attribute shapes, on purpose.
@@ -49,34 +48,34 @@ const characters: Character[] = [
  */
 const deviceState: Record<string, DeviceStats> = {
   pral: {
-    characterId: 'pral',
+    characterId: "pral",
     attributes: [
-      { key: 'power', value: false },
-      { key: 'mode', value: 'care' },
-      { key: 'intensity', value: 2 },
+      { key: "power", value: false },
+      { key: "mode", value: "care" },
+      { key: "intensity", value: 2 },
     ],
-    observedAt: '2026-08-20T09:00:00Z',
+    observedAt: "2026-08-20T09:00:00Z",
   },
   shoecase: {
-    characterId: 'shoecase',
+    characterId: "shoecase",
     attributes: [
-      { key: 'power', value: true },
-      { key: 'mode', value: 'idle' },
-      { key: 'remainingMinutes', value: 0, unit: 'min' },
+      { key: "power", value: true },
+      { key: "mode", value: "idle" },
+      { key: "remainingMinutes", value: 0, unit: "min" },
     ],
-    observedAt: '2026-08-20T09:00:00Z',
+    observedAt: "2026-08-20T09:00:00Z",
   },
   massagechair: {
-    characterId: 'massagechair',
+    characterId: "massagechair",
     attributes: [
-      { key: 'power', value: false },
-      { key: 'program', value: 'idle' },
-      { key: 'intensity', value: 1 },
+      { key: "power", value: false },
+      { key: "program", value: "idle" },
+      { key: "intensity", value: 1 },
       // A key with no label in the dictionary, so the humanising fallback is
       // visible during development rather than only in a test.
-      { key: 'reclineAngle', value: 15, unit: 'deg' },
+      { key: "reclineAngle", value: 15, unit: "deg" },
     ],
-    observedAt: '2026-08-20T09:00:00Z',
+    observedAt: "2026-08-20T09:00:00Z",
   },
 };
 
@@ -84,13 +83,14 @@ const skills: Record<string, Skill[]> = {
   pral: [],
   shoecase: [
     {
-      id: 'sk_pre_1',
-      characterId: 'shoecase',
-      name: '화목 저녁 운동화 관리',
-      tier: 'basic',
-      reason: '지난 14일 동안 화요일과 목요일 저녁에 운동화를 넣으시는 걸 봤어요.',
-      status: 'active',
-      discoveredAt: '2026-08-19T11:00:00Z',
+      id: "sk_pre_1",
+      characterId: "shoecase",
+      name: "화목 저녁 운동화 관리",
+      tier: "basic",
+      reason:
+        "지난 14일 동안 화요일과 목요일 저녁에 운동화를 넣으시는 걸 봤어요.",
+      status: "active",
+      discoveredAt: "2026-08-19T11:00:00Z",
       revisedAt: null,
     },
   ],
@@ -98,28 +98,32 @@ const skills: Record<string, Skill[]> = {
 };
 
 /** Announcements the fake stream delivers, one per character, once each. */
-const scriptedDiscoveries: Array<{ delayMs: number; event: SkillDiscoveredEvent }> = [
+const scriptedDiscoveries: Array<{
+  delayMs: number;
+  event: SkillDiscoveredEvent;
+}> = [
   {
     delayMs: 8_000,
     event: {
-      characterId: 'pral',
+      characterId: "pral",
       message: {
-        id: 'sse_1',
-        characterId: 'pral',
-        role: 'character',
-        text: '주중 밤 11시 전후로 케어를 하시는 패턴이 보여서, 그 시간에 맞춘 스킬을 하나 만들었어요.',
-        kind: 'announcement',
-        skillId: 'sk_pral_1',
-        at: '2026-08-20T09:00:08Z',
+        id: "sse_1",
+        characterId: "pral",
+        role: "character",
+        text: "주중 밤 11시 전후로 케어를 하시는 패턴이 보여서, 그 시간에 맞춘 스킬을 하나 만들었어요.",
+        kind: "announcement",
+        skillId: "sk_pral_1",
+        at: "2026-08-20T09:00:08Z",
       },
       skill: {
-        id: 'sk_pral_1',
-        characterId: 'pral',
-        name: '평일 밤 케어 루틴',
-        tier: 'basic',
-        reason: '14일 중 9일, 밤 10시 50분에서 11시 20분 사이에 케어를 시작하셨어요.',
-        status: 'active',
-        discoveredAt: '2026-08-20T09:00:08Z',
+        id: "sk_pral_1",
+        characterId: "pral",
+        name: "평일 밤 케어 루틴",
+        tier: "basic",
+        reason:
+          "14일 중 9일, 밤 10시 50분에서 11시 20분 사이에 케어를 시작하셨어요.",
+        status: "active",
+        discoveredAt: "2026-08-20T09:00:08Z",
         revisedAt: null,
       },
       progression: { level: 3, exp: 0, expToNext: 200, leveledUp: true },
@@ -128,24 +132,25 @@ const scriptedDiscoveries: Array<{ delayMs: number; event: SkillDiscoveredEvent 
   {
     delayMs: 20_000,
     event: {
-      characterId: 'massagechair',
+      characterId: "massagechair",
       message: {
-        id: 'sse_2',
-        characterId: 'massagechair',
-        role: 'character',
-        text: '두 달치 기록을 보니 비 오는 날마다 목 프로그램을 더 오래 쓰셨더라고요. 그걸 스킬로 묶어봤어요.',
-        kind: 'announcement',
-        skillId: 'sk_chair_1',
-        at: '2026-08-20T09:00:20Z',
+        id: "sse_2",
+        characterId: "massagechair",
+        role: "character",
+        text: "두 달치 기록을 보니 비 오는 날마다 목 프로그램을 더 오래 쓰셨더라고요. 그걸 스킬로 묶어봤어요.",
+        kind: "announcement",
+        skillId: "sk_chair_1",
+        at: "2026-08-20T09:00:20Z",
       },
       skill: {
-        id: 'sk_chair_1',
-        characterId: 'massagechair',
-        name: '흐린 날 목 집중 케어',
-        tier: 'advanced',
-        reason: '60일 기록에서 기압이 낮은 날 목 프로그램 사용 시간이 평균의 1.8배였어요.',
-        status: 'active',
-        discoveredAt: '2026-08-20T09:00:20Z',
+        id: "sk_chair_1",
+        characterId: "massagechair",
+        name: "흐린 날 목 집중 케어",
+        tier: "advanced",
+        reason:
+          "60일 기록에서 기압이 낮은 날 목 프로그램 사용 시간이 평균의 1.8배였어요.",
+        status: "active",
+        discoveredAt: "2026-08-20T09:00:20Z",
         revisedAt: null,
       },
       progression: { level: 2, exp: 0, expToNext: 120, leveledUp: true },
@@ -154,24 +159,25 @@ const scriptedDiscoveries: Array<{ delayMs: number; event: SkillDiscoveredEvent 
   {
     delayMs: 34_000,
     event: {
-      characterId: 'shoecase',
+      characterId: "shoecase",
       message: {
-        id: 'sse_3',
-        characterId: 'shoecase',
-        role: 'character',
-        text: '주말 아침에 러닝화를 자주 꺼내시는 걸 보고, 금요일 밤에 미리 준비해두는 스킬을 만들었어요.',
-        kind: 'announcement',
-        skillId: 'sk_shoe_2',
-        at: '2026-08-20T09:00:34Z',
+        id: "sse_3",
+        characterId: "shoecase",
+        role: "character",
+        text: "주말 아침에 러닝화를 자주 꺼내시는 걸 보고, 금요일 밤에 미리 준비해두는 스킬을 만들었어요.",
+        kind: "announcement",
+        skillId: "sk_shoe_2",
+        at: "2026-08-20T09:00:34Z",
       },
       skill: {
-        id: 'sk_shoe_2',
-        characterId: 'shoecase',
-        name: '주말 러닝 준비',
-        tier: 'advanced',
-        reason: '60일 동안 토요일 아침 러닝화 사용이 12번, 그 전날 밤 관리는 2번뿐이었어요.',
-        status: 'active',
-        discoveredAt: '2026-08-20T09:00:34Z',
+        id: "sk_shoe_2",
+        characterId: "shoecase",
+        name: "주말 러닝 준비",
+        tier: "advanced",
+        reason:
+          "60일 동안 토요일 아침 러닝화 사용이 12번, 그 전날 밤 관리는 2번뿐이었어요.",
+        status: "active",
+        discoveredAt: "2026-08-20T09:00:34Z",
         revisedAt: null,
       },
       progression: { level: 4, exp: 0, expToNext: 300, leveledUp: true },
@@ -179,7 +185,8 @@ const scriptedDiscoveries: Array<{ delayMs: number; event: SkillDiscoveredEvent 
   },
 ];
 
-const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Enough latency for the in-flight marker to be visible while developing. */
 const LATENCY_MS = 450;
@@ -196,9 +203,9 @@ function characterMessage(characterId: string, text: string): ChatMessage {
   return {
     id: `mock_${messageSeq}`,
     characterId,
-    role: 'character',
+    role: "character",
     text,
-    kind: 'normal',
+    kind: "normal",
     at: new Date().toISOString(),
   };
 }
@@ -208,10 +215,19 @@ function bumpExp(characterId: string) {
   const character = characters.find((c) => c.id === characterId);
   if (!character) return null;
   character.exp = Math.min(character.exp + 15, character.expToNext);
-  return { level: character.level, exp: character.exp, expToNext: character.expToNext, leveledUp: false };
+  return {
+    level: character.level,
+    exp: character.exp,
+    expToNext: character.expToNext,
+    leveledUp: false,
+  };
 }
 
-function setAttribute(characterId: string, key: string, value: string | number | boolean) {
+function setAttribute(
+  characterId: string,
+  key: string,
+  value: string | number | boolean,
+) {
   const state = deviceState[characterId];
   if (!state) return;
   const existing = state.attributes.find((a) => a.key === key);
@@ -248,7 +264,7 @@ export function createMockClient(getLang: GetLang): ApiClient {
 
       // Deterministic failure trigger. See the note on scheduling below.
       if (/실패|fail/i.test(text)) {
-        throw new Error('mock failure trigger');
+        throw new Error("mock failure trigger");
       }
 
       // Feedback on a skill: revise it, keeping its id. FE-R-16.
@@ -260,7 +276,7 @@ export function createMockClient(getLang: GetLang): ApiClient {
         const retiring = /그만|하지 ?마|stop|remove/i.test(text);
         const revised: Skill = {
           ...target,
-          status: retiring ? 'retired' : 'active',
+          status: retiring ? "retired" : "active",
           reason: retiring
             ? target.reason
             : `${target.reason} 말씀해주신 대로 조건을 바꿨어요: "${text}"`,
@@ -272,12 +288,12 @@ export function createMockClient(getLang: GetLang): ApiClient {
           message: characterMessage(
             characterId,
             retiring
-              ? lang === 'ko'
-                ? '알겠어요. 그 스킬은 이제 제안하지 않을게요.'
+              ? lang === "ko"
+                ? "알겠어요. 그 스킬은 이제 제안하지 않을게요."
                 : "Understood. I won't suggest that one any more."
-              : lang === 'ko'
-                ? '조건을 바꿨어요. 스킬은 그대로 두고 트리거만 손봤습니다.'
-                : 'Adjusted the trigger. The skill itself is unchanged.',
+              : lang === "ko"
+                ? "조건을 바꿨어요. 스킬은 그대로 두고 트리거만 손봤습니다."
+                : "Adjusted the trigger. The skill itself is unchanged.",
           ),
           deviceState: null,
           progression: bumpExp(characterId),
@@ -291,13 +307,13 @@ export function createMockClient(getLang: GetLang): ApiClient {
       const requested = firstNumber(text);
       if (requested !== null) {
         const committed = Math.min(requested, DEVICE_MINUTE_LIMIT);
-        setAttribute(characterId, 'power', true);
-        setAttribute(characterId, 'mode', 'dry');
-        setAttribute(characterId, 'remainingMinutes', committed);
+        setAttribute(characterId, "power", true);
+        setAttribute(characterId, "mode", "dry");
+        setAttribute(characterId, "remainingMinutes", committed);
         return {
           message: characterMessage(
             characterId,
-            lang === 'ko'
+            lang === "ko"
               ? `${requested}분 말씀하셨는데 이 제품은 ${committed}분까지만 돼서 ${committed}분으로 맞췄어요.`
               : `You said ${requested} minutes, but this product caps at ${committed}, so I set ${committed}.`,
           ),
@@ -307,11 +323,11 @@ export function createMockClient(getLang: GetLang): ApiClient {
         };
       }
 
-      setAttribute(characterId, 'power', true);
+      setAttribute(characterId, "power", true);
       return {
         message: characterMessage(
           characterId,
-          lang === 'ko' ? '네, 그렇게 해뒀어요.' : 'Done, that is set.',
+          lang === "ko" ? "네, 그렇게 해뒀어요." : "Done, that is set.",
         ),
         deviceState: structuredClone(deviceState[characterId]!),
         progression: bumpExp(characterId),
@@ -324,14 +340,14 @@ export function createMockClient(getLang: GetLang): ApiClient {
       const target = (skills[characterId] ?? []).find((s) => s.id === skillId);
       if (!target) throw new Error(`no such skill: ${skillId}`);
 
-      setAttribute(characterId, 'power', true);
-      setAttribute(characterId, 'mode', 'dry');
-      setAttribute(characterId, 'remainingMinutes', DEVICE_MINUTE_LIMIT);
+      setAttribute(characterId, "power", true);
+      setAttribute(characterId, "mode", "dry");
+      setAttribute(characterId, "remainingMinutes", DEVICE_MINUTE_LIMIT);
 
       return {
         message: characterMessage(
           characterId,
-          getLang() === 'ko'
+          getLang() === "ko"
             ? `"${target.name}" 실행했어요.`
             : `Ran "${target.name}".`,
         ),
@@ -344,11 +360,11 @@ export function createMockClient(getLang: GetLang): ApiClient {
     async transcribe(audio) {
       await wait(900);
       if (audio.size === 0) {
-        throw new Error('empty audio');
+        throw new Error("empty audio");
       }
       // A fixed transcript, and deliberately a numeric one so the clamp path is
       // reachable by voice as well as by typing.
-      return '운동화 30분만 건조해줘';
+      return "운동화 30분만 건조해줘";
     },
 
     connectEvents(handlers: EventHandlers) {
@@ -374,11 +390,15 @@ export function createMockClient(getLang: GetLang): ApiClient {
       // presentations on demand, which is the actual purpose.
       (window as unknown as { __mock?: unknown }).__mock = {
         announce: (index = 0) =>
-          handlers.onAnnouncement(structuredClone(scriptedDiscoveries[index]!.event)),
+          handlers.onAnnouncement(
+            structuredClone(scriptedDiscoveries[index]!.event),
+          ),
         drop: () => {
           handlers.onDrop();
           // Recovers on its own, so the banner clearing itself is observable too.
-          timers.push(setTimeout(() => !disconnected && handlers.onOpen(), 4_000));
+          timers.push(
+            setTimeout(() => !disconnected && handlers.onOpen(), 4_000),
+          );
         },
       };
 

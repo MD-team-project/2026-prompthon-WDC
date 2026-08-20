@@ -1,36 +1,53 @@
 /**
  * The one place FE talks to BE.
  *
- * FE-R-24: `lang` is attached here, centrally, to every request. Per-call-site
- * passing means one site gets missed and that one interaction replies in the
- * wrong language.
+ * FE-R-24: `lang` is attached here, centrally, to every request that BE actually
+ * reads. Per-call-site passing means one site gets missed and that one
+ * interaction replies in the wrong language.
  *
- * FE-R-27: one SSE connection for the whole app, carrying events for all three
- * characters. A per-character connection cannot deliver an announcement for a
- * character the user is not viewing, which is what the badge depends on.
+ * FE-R-27: one SSE connection per character, opened here once and shared by the
+ * whole app. A connection opened per character SCREEN cannot deliver an
+ * announcement for a character the user is not viewing, which is what the badge
+ * depends on.
  *
  * FE does NOT retry. NFR-2.1's timeout and single retry live where the model
  * call lives; retrying here would produce two retries and double the worst case.
  *
- * Route shapes are FE's proposal - see
- * `aidlc-docs/construction/fe/functional-design/backend-mock-contract.md`.
+ * The real client below is written against BE's ACTUAL contract, not FE's
+ * original proposal in `aidlc-docs/construction/fe/functional-design/
+ * backend-mock-contract.md` - see `packages/backend` on `construction/be` (PR #7).
+ * Three real gaps in that contract, and how this file bridges them:
+ *
+ *   1. No `/api/characters` route, no progression, no per-product tier/status -
+ *      that data simply never arrives from BE. `./characters.ts` supplies the
+ *      roster locally, and `state.ts` supplies a local cosmetic exp bump. See
+ *      the note there.
+ *   2. No standalone device-state route - `DeviceState` only ever appears
+ *      inside a chat turn's `done` event (and never at all from `/invoke`).
+ *      `getDeviceState` has nothing to fetch and resolves `null`.
+ *   3. No `/api/transcribe` route yet. `transcribe` below is still wired to
+ *      FE's original mock contract so it starts working the moment BE adds it,
+ *      but it is unreachable today because the mic is forced to `unavailable`
+ *      in real-API mode (see `App.tsx`).
  */
 
 import type {
   ActionResponse,
   Character,
+  ChatMessage,
   DeviceStats,
   Lang,
-  SendMessageRequest,
+  ProductId,
   Skill,
   SkillDiscoveredEvent,
-  TranscribeResponse,
 } from '@prompthon/shared';
+import { CHARACTER_DEFAULTS } from './characters';
 import { createMockClient } from './mock';
 
 export interface ApiClient {
   listCharacters(): Promise<Character[]>;
-  getDeviceState(characterId: string): Promise<DeviceStats>;
+  /** `null` when there is nothing to report yet - see the class-level note. */
+  getDeviceState(characterId: string): Promise<DeviceStats | null>;
   listSkills(characterId: string): Promise<Skill[]>;
   sendMessage(characterId: string, text: string, skillId: string | null): Promise<ActionResponse>;
   invokeSkill(characterId: string, skillId: string): Promise<ActionResponse>;
@@ -52,9 +69,6 @@ export type GetLang = () => Lang;
  * body - a failed message, a failed invoke and a failed transcription each have
  * their own sentence. So the error code is not read here, and parsing it out
  * would be flexibility with no consumer.
- *
- * BE is free to return `{ error: { code, message } }` as the mock contract
- * proposes. FE simply does not branch on it yet.
  */
 async function unwrap<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -63,45 +77,197 @@ async function unwrap<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
+// ---------------------------------------------------------------------------
+// BE's actual wire shapes (packages/backend/src/routes + @prompthon/shared on
+// construction/be). Kept local rather than imported from a real shared
+// package: this repo's own `@prompthon/shared` (packages/shared/src/types.ts)
+// is FE's pre-integration proposal, not BE's package, and the two have not
+// been reconciled into one build yet. Everything below adapts these into the
+// view-model types FE's components already render.
+// ---------------------------------------------------------------------------
+
+interface BeDeviceState {
+  productId: ProductId;
+  power: 'on' | 'off';
+  attributes: Record<string, unknown>;
+  updatedAt: string;
+}
+
+interface BeSkillSummary {
+  id: string;
+  productId: ProductId;
+  title: string;
+  createdAt: string;
+}
+
+interface BeSkillRecord extends BeSkillSummary {
+  content: string;
+}
+
+interface BeFailure {
+  code: string;
+  message: string;
+}
+
+interface BeAgentReply {
+  prose: string;
+  deviceState?: BeDeviceState;
+  invokedSkillId?: string;
+  failure?: BeFailure;
+}
+
+type BeControlEvent =
+  | { type: 'token'; text: string }
+  | { type: 'deviceState'; state: BeDeviceState }
+  | { type: 'done'; reply: BeAgentReply }
+  | { type: 'discoveryProgress'; productId: ProductId; phase: string }
+  | { type: 'discoveryReasoning'; productId: ProductId; attempt: number; reasoning: string; response: string }
+  | { type: 'skillDiscovered'; productId: ProductId; skill: BeSkillSummary };
+
+const PRODUCT_IDS: ProductId[] = CHARACTER_DEFAULTS.map((c) => c.productId);
+
+function toDeviceStats(state: BeDeviceState): DeviceStats {
+  const attributes: DeviceStats['attributes'] = [{ key: 'power', value: state.power === 'on' }];
+  for (const [key, value] of Object.entries(state.attributes)) {
+    attributes.push({ key, value: value as string | number | boolean });
+  }
+  return { characterId: state.productId, attributes, observedAt: state.updatedAt };
+}
+
+/**
+ * BE has no tier, status or revision concept (construction/be PR #7) - every
+ * skill it returns is presented uniformly rather than guessed at. Revisit once
+ * BE distinguishes them.
+ */
+function toSkill(record: BeSkillRecord): Skill {
+  return {
+    id: record.id,
+    characterId: record.productId,
+    name: record.title,
+    tier: 'basic',
+    reason: record.content,
+    status: 'active',
+    discoveredAt: record.createdAt,
+    revisedAt: null,
+  };
+}
+
+function characterMessage(characterId: string, text: string, kind: ChatMessage['kind'] = 'normal'): ChatMessage {
+  return {
+    id: `be_${crypto.randomUUID()}`,
+    characterId,
+    role: 'character',
+    text,
+    kind,
+    at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Reads an SSE response body until its `done` event, and returns that event's
+ * reply. `/chat`'s intermediate `token`/`deviceState` events are BE's live
+ * progress for a UI that streams the reply as it is generated - this client
+ * does not stream yet, so it drains them and uses the `done` event's `reply`,
+ * which already carries the accumulated prose and the last deviceState BE saw
+ * (see `packages/backend/src/routes/chat.ts`).
+ */
+async function readChatUntilDone(body: ReadableStream<Uint8Array>): Promise<BeAgentReply> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let separatorIndex = buffer.indexOf('\n\n');
+    while (separatorIndex !== -1) {
+      const frame = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+
+      for (const line of frame.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const event = JSON.parse(line.slice('data: '.length)) as BeControlEvent;
+        if (event.type === 'done') return event.reply;
+      }
+
+      separatorIndex = buffer.indexOf('\n\n');
+    }
+  }
+
+  throw new Error('chat stream ended without a done event');
+}
+
+/**
+ * `/chat` takes no `skillId` parameter - feedback on a skill is meant to
+ * happen entirely through natural language, with the agent using its own
+ * `listSkills`/`getSkill` tools to find the one being discussed (see
+ * `packages/backend/src/routes/skills.ts`'s closing note). Naming the exact id
+ * inline gives it something to resolve directly instead of relying on the
+ * skill having been named in prose - a bridge over a real gap, not a
+ * documented BE parameter.
+ */
+function withSkillContext(text: string, skillId: string | null): string {
+  return skillId ? `[skillId: ${skillId}] ${text}` : text;
+}
+
 function createHttpClient(getLang: GetLang): ApiClient {
-  const withLang = (path: string) => {
-    const separator = path.includes('?') ? '&' : '?';
-    return `${path}${separator}lang=${getLang()}`;
-  };
-
-  // Typed against the shared shape rather than `unknown`, so the request body is
-  // checked against the contract BE reads instead of only being documented in it.
-  const postJson = async (
-    path: string,
-    body: Omit<SendMessageRequest, 'lang'> | Record<string, never>,
-  ): Promise<ActionResponse> => {
-    const response = await fetch(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, lang: getLang() }),
-    });
-    return unwrap<ActionResponse>(response);
-  };
-
   return {
     async listCharacters() {
-      return unwrap<Character[]>(await fetch(withLang('/api/characters')));
+      return structuredClone(CHARACTER_DEFAULTS);
     },
 
-    async getDeviceState(characterId) {
-      return unwrap<DeviceStats>(await fetch(withLang(`/api/characters/${characterId}/state`)));
+    async getDeviceState() {
+      return null;
     },
 
     async listSkills(characterId) {
-      return unwrap<Skill[]>(await fetch(withLang(`/api/characters/${characterId}/skills`)));
+      const summaries = await unwrap<BeSkillSummary[]>(await fetch(`/api/characters/${characterId}/skills`));
+      // The list route omits `content` to keep polling cheap (BE's own comment on the
+      // route) - the compendium needs the full reason, so each summary is filled in.
+      const records = await Promise.all(
+        summaries.map(async (summary) =>
+          unwrap<BeSkillRecord>(await fetch(`/api/characters/${characterId}/skills/${summary.id}`)),
+        ),
+      );
+      return records.map(toSkill);
     },
 
     async sendMessage(characterId, text, skillId) {
-      return postJson(`/api/characters/${characterId}/messages`, { text, skillId });
+      const response = await fetch(`/api/characters/${characterId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: withSkillContext(text, skillId) }),
+      });
+      if (!response.ok || !response.body) {
+        throw new Error(`Request failed (${response.status})`);
+      }
+
+      const reply = await readChatUntilDone(response.body);
+      // A model-call failure still arrives as a `done` event with its own in-character
+      // apology and no deviceState (NFR-2.2, by BE's own design) - that is rendered as
+      // the character speaking, styled as a failure, rather than discarded in favour of
+      // FE's generic error text. Only a transport-level failure (above) throws.
+      return {
+        message: characterMessage(characterId, reply.prose, reply.failure ? 'failure' : 'normal'),
+        deviceState: reply.deviceState ? toDeviceStats(reply.deviceState) : null,
+        skill: null,
+      };
     },
 
     async invokeSkill(characterId, skillId) {
-      return postJson(`/api/characters/${characterId}/skills/${skillId}/invoke`, {});
+      const response = await fetch(`/api/characters/${characterId}/skills/${skillId}/invoke`, {
+        method: 'POST',
+      });
+      const body = await unwrap<{ prose: string; invokedSkillId?: string; failure?: BeFailure }>(response);
+      // No deviceState in this response even when the skill changed one (a real BE gap) -
+      // the panel simply waits for the next chat turn that reports on the device.
+      return {
+        message: characterMessage(characterId, body.prose, body.failure ? 'failure' : 'normal'),
+        deviceState: null,
+        skill: null,
+      };
     },
 
     async transcribe(audio) {
@@ -109,54 +275,84 @@ function createHttpClient(getLang: GetLang): ApiClient {
       // (NFR-1.2) - the browser never talks to Transcribe.
       const form = new FormData();
       form.append('audio', audio, 'utterance.webm');
-      const response = await fetch(withLang('/api/transcribe'), { method: 'POST', body: form });
-      const body = await unwrap<TranscribeResponse>(response);
+      const response = await fetch('/api/transcribe', { method: 'POST', body: form });
+      const body = await unwrap<{ text: string }>(response);
       return body.text;
     },
 
     connectEvents(handlers) {
-      // EventSource reconnects on its own, honouring the server's `retry:`
-      // interval. Hand-rolling backoff on top of that would be reimplementing a
-      // platform feature - and worse than it, since the native retry respects
-      // what the server asks for.
-      //
-      // The one case the platform does NOT cover is a fatal error, where
-      // readyState goes to CLOSED and it stops trying. That is exactly the SSE
-      // failure a dev-server proxy produces, so it gets a plain fixed retry.
-      let source: EventSource | null = null;
-      let retryTimer: ReturnType<typeof setTimeout> | null = null;
+      // BE's events route is per-product (`/api/characters/:productId/events`), not the
+      // single global stream FE's original proposal assumed - so this opens one
+      // EventSource per character rather than one for the app. `onOpen` waits for all of
+      // them; `onDrop`/reconnect happen per connection, since one character's channel can
+      // drop independently of the others.
       let closed = false;
+      const sources = new Map<ProductId, EventSource>();
+      const retryTimers = new Map<ProductId, ReturnType<typeof setTimeout>>();
+      const openIds = new Set<ProductId>();
 
-      const open = () => {
+      const announceText = (name: string): string =>
+        getLang() === 'ko' ? `${name} 스킬을 새로 발견했어요!` : `I discovered a new skill: ${name}`;
+
+      const notifyDiscovery = async (productId: ProductId, summary: BeSkillSummary) => {
+        // The event only carries a summary (no `content`) - fetch the full record so the
+        // spotlight/compendium has a reason to show the moment it opens, not a blank one
+        // until the next poll.
+        let skill: Skill;
+        try {
+          const record = await unwrap<BeSkillRecord>(
+            await fetch(`/api/characters/${productId}/skills/${summary.id}`),
+          );
+          skill = toSkill(record);
+        } catch {
+          skill = toSkill({ ...summary, content: '' });
+        }
+        const event: SkillDiscoveredEvent = {
+          characterId: productId,
+          skill,
+          // BE's discovery graph never produces user-facing prose for this moment (only
+          // dev-facing reasoning, logged server-side) - the announcement caption is FE's
+          // own wording, not BE's.
+          message: characterMessage(productId, announceText(skill.name), 'announcement'),
+        };
+        handlers.onAnnouncement(event);
+      };
+
+      const open = (productId: ProductId) => {
         if (closed) return;
-        source = new EventSource('/api/events');
+        const source = new EventSource(`/api/characters/${productId}/events`);
+        sources.set(productId, source);
 
-        source.onopen = () => handlers.onOpen();
+        source.onopen = () => {
+          openIds.add(productId);
+          if (openIds.size === PRODUCT_IDS.length) handlers.onOpen();
+        };
 
-        source.addEventListener('skill_discovered', (raw) => {
+        source.onmessage = (raw) => {
+          let event: BeControlEvent;
           try {
-            handlers.onAnnouncement(JSON.parse((raw as MessageEvent).data) as SkillDiscoveredEvent);
+            event = JSON.parse((raw as MessageEvent).data) as BeControlEvent;
           } catch {
-            // A malformed event is not worth tearing the connection down for.
+            return; // A malformed event is not worth tearing the connection down for.
           }
-        });
+          if (event.type === 'skillDiscovered') void notifyDiscovery(productId, event.skill);
+        };
 
         source.onerror = () => {
-          // The banner goes up either way (FE-R-18). If the browser is still
-          // retrying, `onopen` will fire again and clear it.
+          openIds.delete(productId);
           handlers.onDrop();
-          if (source?.readyState === EventSource.CLOSED && !closed) {
-            retryTimer = setTimeout(open, 3000);
+          if (source.readyState === EventSource.CLOSED && !closed) {
+            retryTimers.set(productId, setTimeout(() => open(productId), 3000));
           }
         };
       };
 
-      open();
+      for (const productId of PRODUCT_IDS) open(productId);
 
       return () => {
         closed = true;
-        if (retryTimer) clearTimeout(retryTimer);
-        source?.close();
+        for (const timer of retryTimers.values()) clearTimeout(timer);
+        for (const source of sources.values()) source.close();
       };
     },
   };
