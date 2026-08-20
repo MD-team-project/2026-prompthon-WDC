@@ -193,3 +193,35 @@ export function splitDuration(totalMinutes: number): { hours: number; minutes: n
   const whole = Math.round(totalMinutes);
   return { hours: Math.floor(whole / 60), minutes: whole % 60 };
 }
+
+/**
+ * A reading's progress toward a goal, as 0..1, for a ring gauge.
+ *
+ * Clamped at 1 rather than allowed to overflow: past the goal the ring is full
+ * and the exact figure is already printed beside it, so a 1.4 would either draw
+ * a second lap nobody can read or silently overwrite the first. The goal being
+ * MET is the thing the ring communicates.
+ *
+ * Returns 0 for non-finite input and for a goal of zero or less. That is the
+ * same "absent reads as absent" choice `groupThousands` makes with "-": an
+ * empty ring is honest about having nothing to show, where NaN in a
+ * `stroke-dasharray` silently drops the stroke and leaves no ring at all.
+ */
+export function ringRatio(value: number, goal: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(goal) || goal <= 0) return 0;
+  if (value <= 0) return 0;
+  return Math.min(value / goal, 1);
+}
+
+/**
+ * A whole-degree temperature, for the weather widget's headline.
+ *
+ * Rounded rather than given a decimal, because that is how a temperature is
+ * read at a glance, and signed input has to survive: `-8` is a real reading.
+ * `Math.round` is deliberate over `Math.trunc` - truncating would report -7.6°C
+ * as -7°, which is warmer than the truth.
+ */
+export function toWholeDegrees(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  return String(Math.round(value));
+}

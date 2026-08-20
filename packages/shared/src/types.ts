@@ -79,6 +79,8 @@ export type WeatherCondition = 'clear' | 'rain' | 'cloudy' | 'snow';
  */
 export interface DailyContextStats {
   weather: WeatherCondition;
+  /** Degrees Celsius. Signed - winter readings are legitimately negative. */
+  temperatureC: number;
   steps: number;
   distanceKm: number;
   screenTimeMinutes: number;

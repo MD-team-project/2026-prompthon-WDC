@@ -123,6 +123,7 @@ interface BeDeviceState {
 interface BeDailyContext {
   date: string;
   weather: WeatherCondition;
+  temperatureC: number;
   steps: number;
   distanceKm: number;
   screenTimeMinutes: number;
@@ -187,6 +188,7 @@ function toDeviceStats(state: BeDeviceState): DeviceStats {
 function toDailyContext(body: BeDailyContext): DailyContextStats {
   return {
     weather: body.weather,
+    temperatureC: body.temperatureC,
     steps: body.steps,
     distanceKm: body.distanceKm,
     screenTimeMinutes: body.screenTimeMinutes,
