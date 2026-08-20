@@ -1315,3 +1315,56 @@ Also prepared merge resolutions for the four files both branches touch - `packag
 **Context**: CONSTRUCTION - INFRA aligned to BE's actual data-access code. Table re-provisioned and verified; BE handoff published with blocking items.
 
 ---
+## Construction - INFRA Team AWS Access Decided as Shared Credentials
+**Timestamp**: 2026-08-20T12:45:00Z
+**User Input**: "지금 내 aws 계정 내에서 생성되어서 BE 개발자 측의 접근 권한이 없음. 공통 권한을 가진 범위 내로 할 수 있는지, 아니면 한사람의 aws 계정 정보로 공통으로 사용해야될지 알려줘" / "A로 해서 자격증명 공유할 수 있도록하는게 좋을듯요"
+**AI Response**: "Probed the account rather than assuming. Confirmed `iam:CreateUser` is denied by actually attempting it - `WSParticipantRole` carries `PowerUserAccess`, which excludes IAM writes, so a per-developer IAM user with access keys is impossible. Also ruled out reusing the pre-existing `bedrock-apikey` IAM user: its only policy is `AmazonBedrockLimitedAccess`, so an access key for it could not reach DynamoDB or Parameter Store even if one could be issued. Established that the operator's own credentials are temporary Workshop Studio session credentials - access key, secret, and session token, with no expiry recorded locally - which means expiry affects `cdk deploy` too, not just the developers.
+
+Presented three workable options with the tradeoff each carries: shared Workshop Studio credentials, per-developer deployment into their own account using the portable IaC, or an IAM role each developer assumes from their own AWS identity. Noted that developing without AWS access is only partly possible, since DynamoDB can be substituted but Bedrock cannot and the entire control path depends on it.
+
+User chose shared credentials. Wrote `infra/ACCESS.md` with the procedure: which three values to share, the mandatory profile name `prompthon` since `.env` and every repo command assume it, four verification commands covering identity, table, Bedrock and the secret, expiry symptoms and recovery, and the instruction to share only over a private channel and never a commit, PR, or issue. Recorded two cautions honestly rather than glossing them: every team member holds PowerUserAccess and could destroy the verified deployment, and CloudTrail attributes every action to `WSParticipantRole/Participant` so there is no attribution between people. Kept the two rejected alternatives documented with the condition that would make each viable. No credential value was read, printed, or written anywhere - only the key names present in the profile were inspected."
+**Context**: CONSTRUCTION - INFRA team access procedure published. No infrastructure change.
+
+---
+## Construction - INFRA Resolution for BE's Cross-Account Blocker on PR #6
+**Timestamp**: 2026-08-20T13:40:00Z
+**User Input**: "현재 브랜치 PR에 남겨져있는 코멘트 읽어서 해결방안 만들어내라"
+**AI Response**: "Read both comments on PR #6 (`gh pr view 6`; no reviews exist, only issue comments). The first is INFRA's own follow-up and is already superseded by commit 4ca5667. The live item is BE's 13:17Z comment: BE local is account `466501979672`, the deployed stack is in `643922457910`, so BE cannot reach the table and offered three unblock paths.
+
+Probed each path against the live account rather than reasoning about it. **Option 1's resource-policy form is impossible**: `dynamodb:PutResourcePolicy` is refused by an explicit deny in SCP `arn:aws:organizations::733415556254:policy/o-1ua8520d1t/service_control_policy/p-a4aol0sp`. The probe was deliberately non-granting - the principal was this account's own root, for `DescribeTable` only, scheduled for immediate deletion - and it never got far enough to change anything. An explicit SCP deny cannot be overridden by any policy, so no table policy works here. `GetResourcePolicy` is permitted and confirms the table carries none. **Option 1's assumable-role form is permitted on this side**: probed `iam:CreateRole` with a malformed trust document and got `MalformedPolicyDocument: Policy has no statements`, meaning authorization passed before validation; no role was created. But BE's half - whether `466501979672` allows `sts:AssumeRole` outward - is not observable from here and the same org already denies `PutResourcePolicy`. **Option 3 is viable now**: instance `i-0ede6aab809e7c1b0` is SSM `PingStatus: Online`, agent 3.3.4624.0.
+
+Confirmed BE is not misconfigured. `ResourceNotFoundException` is the correct answer to a cross-account lookup by name, because DynamoDB table names are account-scoped - BE's client resolved the name inside its own account. Both ARNs are `WSParticipantRole/Participant`, which is what Workshop Studio issues per participant, so these are two genuine sandboxes and not a pasted-credential error.
+
+Recommended a fourth path neither comment considered, and recommended it over all three: **BE creates an equivalent table in their own account with one `create-table` command** - `id` String HASH, no sort key, no index, on-demand - and points `DDB_TABLE_NAME` at it. Same schema as deployed, so it exercises the same `skills.ts` call shapes, with no cross-account plumbing and no SCP exposure. Explicitly not `cdk deploy` into BE's account: it would work, since the stack reads `this.account`/`this.region`, but it also stands up a `t3.small` and an instance profile BE has no use for. Option 3 stays on the list rather than becoming a fallback, because the local table cannot prove `table.grantReadWriteData(role)` resolves - only the instance role can, and that is the acceptance test. Published a table separating what each verification actually covers.
+
+Found and fixed a defect while verifying: `.env-example` carried `DDB_TABLE_NAME=prompthon-app`, a name from the withdrawn fixed-name revision that exists in neither account, so anyone copying the template got a backend failing on every DynamoDB call - the same failure BE hit, from a different cause. It now carries the real generated name, states that the name is CloudFormation-generated and therefore account-specific, points at the `DdbTableName` stack output as the source, and warns against pointing it at `643922457910`'s table from outside. `runtime-contract.md` and `ARCHITECTURE.md` were already correct and were left alone.
+
+Published `aidlc-docs/construction/infra/code/cross-account-access.md`. Live state re-probed and recorded there: stack `UPDATE_COMPLETE`, table `ACTIVE` with `id` HASH only, 0 GSI, 0 items, no resource policy, instance SSM Online. No secret was read; no infrastructure was changed."
+**Context**: CONSTRUCTION - INFRA response to PR #6 review comment. Resolution published; no infrastructure change. PR reply not yet posted - awaiting user confirmation.
+
+---
+## Construction - Resolution Changed to Shared Credentials, Other-Session Diffs Reverted
+**Timestamp**: 2026-08-20T13:55:00Z
+**User Input**: "나의 자격증명을 공유하는 방식으로 만들고, pr올릴것.
+
+이 세션 말고 다른곳에서 수정한 diff는 없앨것"
+**AI Response**: "Changed the recommendation from 'BE creates an equivalent table in their own account' to BE's **option 2: account `643922457910` is canonical and the team shares one credential set**. Rewrote `cross-account-access.md` around that.
+
+Added the argument for option 2 over the assumable-role form, which the previous draft did not make: a role scoped to the table leaves BE without Bedrock or the Friendli SSM parameter, both of which BE needs, so it would have to be widened until it becomes option 2 with extra steps. The SCP finding that kills option 1's resource-policy form is unchanged and still the load-bearing evidence.
+
+Verified all four setup checks under the shared credential set rather than copying them from a prior draft, since the whole document rests on those credentials actually reaching what BE needs. Recorded observed outputs: identity `643922457910` / `WSParticipantRole/Participant`; table `ACTIVE` with keys `[\"id\"]`; Bedrock `converse` returns `OK` on both `us.anthropic.claude-opus-4-6-v1` (the configured `BEDROCK_MODEL_ID`) and `us.anthropic.claude-haiku-4-5-20251001-v1:0`; `/prompthon/friendli-api-key` present as `SecureString` version 2, length 56. No secret value was printed or stored - only its length.
+
+Stated the cost of sharing rather than presenting it as free: every member holds `PowerUserAccess` so anyone can delete the stack, with `cdk destroy` named as the specific hazard against the three-day account-deletion constraint; and CloudTrail attributes everything to `WSParticipantRole/Participant` so there is no attribution. Recorded that per-person IAM users are not an available alternative - `iam:CreateUser` is denied because `PowerUserAccess` excludes IAM writes, verified by attempting it - so the real choice was shared credentials or separate accounts, and separate accounts is what produced this blocker.
+
+Kept option 3 as the last mile rather than a fallback, with a table showing that shared credentials cannot exercise `table.grantReadWriteData(role)` because a local run authenticates as the participant role, not the instance role.
+
+**Reverted all diffs originating outside this session, as directed.** `git checkout` on `aidlc-docs/construction/infra/code/runtime-contract.md` (its 'Getting AWS access' section, added 12:45) and `infra/README.md` (its ACCESS.md pointer). Deleted the untracked `infra/ACCESS.md`, also from 12:45. Its verified content was not discarded - the setup procedure, the four checks, the expiry handling, the IAM-user impossibility finding and the two cautions were folded into `cross-account-access.md`, which is where they belong now that shared credentials IS the resolution rather than a separate topic. One overlapping document instead of two.
+
+**`.kiro/settings/mcp.json` left modified and reported rather than reverted.** It is IDE tooling config from a session earlier than either of the two being reverted, it was already deliberately excluded from commit `1310e69` as unrelated, and reverting it would remove the `aws-mcp` server this workspace uses for every AWS probe in this unit. Flagged to the user for an explicit call; it is not staged and does not enter the PR either way.
+
+Re-simplified the `.env-example` comment: the previous draft warned against pointing the value at `643922457910` from another account, which is now the opposite of the procedure. It now says the name is account-specific, comes from the `DdbTableName` stack output, and points at the credentials setup.
+
+Verification: `tsc --noEmit` clean, 5/5 template assertions pass, no infrastructure change. Committing and pushing to `construction/infra`, then posting the resolution as a PR #6 comment."
+**Context**: CONSTRUCTION - INFRA response to PR #6. Resolution is shared credentials. Other-session diffs reverted; mcp.json flagged.
+
+---
