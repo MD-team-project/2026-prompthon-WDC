@@ -1,8 +1,17 @@
 // FR-5.11: SENSITIVE data class, same as usage.ts - only src/discovery/ may import this.
+//
+// That restriction is about the ACCUMULATED WINDOW, which is what reveals a
+// routine. Today's single live reading is not held here at all - it is fetched
+// from device-stub through `deviceAdapter.getDailyContext()` and is deliberately
+// user-facing (see `DailyContext` in @prompthon/shared). So there is no
+// "today" getter in this file: what used to be here read today out of the
+// seeded history, which meant it returned null on every day the fixture didn't
+// happen to cover - i.e. every day after the fixture was authored, silently
+// disabling the proactive suggestion it fed.
 
 // ponytail: in-memory store, not DynamoDB - same deferral as usage.ts/skills.ts.
 
-import type { AppContextEvent } from "@prompthon/shared";
+import type { AppContextEvent, DailyContext } from "@prompthon/shared";
 
 const context: AppContextEvent[] = [];
 
@@ -17,7 +26,17 @@ export function readContextWindow(days: number): AppContextEvent[] {
   return context.filter((c) => new Date(c.date).getTime() >= cutoff);
 }
 
-export function getTodayContext(): AppContextEvent | null {
-  const today = new Date().toISOString().slice(0, 10);
-  return context.find((c) => c.date === today) ?? null;
+/**
+ * The stored window with today's live reading folded in, replacing any stored
+ * row for the same date.
+ *
+ * Discovery joins device events to context by date, and today's live device
+ * events are exactly the ones a demo generates on stage - without this they
+ * would join against nothing and the run would reason about today as a day
+ * with no known weather.
+ */
+export function withToday(window: AppContextEvent[], today: DailyContext | null): AppContextEvent[] {
+  if (!today) return window;
+  const { observedAt, ...day } = today;
+  return [...window.filter((c) => c.date !== day.date), day];
 }

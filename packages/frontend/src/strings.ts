@@ -11,8 +11,8 @@
  * unfilled and hiding the toggle - no other code changes.
  */
 
-import type { Lang } from "@prompthon/shared";
-import { resolveLabel } from "./pure";
+import type { DailyContextStats, Lang, WeatherCondition } from "@prompthon/shared";
+import { groupThousands, resolveLabel, splitDuration, toTenth } from "./pure";
 
 const ko = {
   "app.title": "Thin뀨~",
@@ -29,6 +29,19 @@ const ko = {
   "stat.updating": "반영 중",
   "stat.none": "상태를 불러오는 중",
   "stat.device": "기기 상태",
+  "stat.context": "오늘의 기록",
+  "context.none": "오늘 기록을 불러오는 중",
+  "context.unavailable": "오늘 기록을 가져오지 못했어요",
+  "context.weather": "날씨",
+  "context.steps": "걸음",
+  "context.distance": "이동",
+  "context.screen": "화면 시간",
+  "context.unit.steps": "걸음",
+  "context.unit.km": "km",
+  "weather.clear": "맑음",
+  "weather.rain": "비",
+  "weather.cloudy": "흐림",
+  "weather.snow": "눈",
   "stage.levelup": "LEVEL UP",
   "stage.switch": "캐릭터 전환",
   "stage.hint": "좌우로 넘겨서 캐릭터 전환",
@@ -78,6 +91,19 @@ const en: Record<StringKey, string> = {
   "stat.updating": "updating",
   "stat.none": "Loading state",
   "stat.device": "Device state",
+  "stat.context": "Today so far",
+  "context.none": "Loading today's readings",
+  "context.unavailable": "Couldn't read today's figures",
+  "context.weather": "Weather",
+  "context.steps": "Steps",
+  "context.distance": "Distance",
+  "context.screen": "Screen time",
+  "context.unit.steps": "steps",
+  "context.unit.km": "km",
+  "weather.clear": "Clear",
+  "weather.rain": "Rain",
+  "weather.cloudy": "Cloudy",
+  "weather.snow": "Snow",
   "stage.levelup": "LEVEL UP",
   "stage.switch": "Switch character",
   "stage.hint": "Swipe to switch character",
@@ -183,4 +209,81 @@ export function attributeValue(
     return String(value);
   }
   return attributeValues[lang][value] ?? value;
+}
+
+// ---------------------------------------------------------------------------
+// Today's context, turned into what the panel renders.
+// ---------------------------------------------------------------------------
+
+const WEATHER_GLYPHS: Record<WeatherCondition, string> = {
+  clear: "☀️",
+  rain: "🌧️",
+  cloudy: "☁️",
+  snow: "❄️",
+};
+
+export function weatherLabel(weather: WeatherCondition, lang: Lang): string {
+  return strings[lang][`weather.${weather}`];
+}
+
+/** ko "3시간 14분" / en "3h 14m", dropping the hours part below an hour. */
+export function screenTimeText(totalMinutes: number, lang: Lang): string {
+  const { hours, minutes } = splitDuration(totalMinutes);
+  if (lang === "ko") {
+    return hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`;
+  }
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+export interface ContextChip {
+  key: string;
+  /** A weather icon or a fixed pictogram. Decorative - the label carries the meaning. */
+  glyph: string;
+  label: string;
+  value: string;
+  unit?: string;
+}
+
+/**
+ * The four chips, in display order, formatted.
+ *
+ * Order is decided here rather than in the component, and it is deliberate:
+ * weather first because it is the signal the user did not choose, then what
+ * their body did, then what their phone did. That is also roughly the order the
+ * character reasons in (see the backend's shared agent instructions), so the
+ * panel reads as the same story the character is telling.
+ *
+ * Screen time carries no `unit` because "3시간 14분" already contains its
+ * units - appending one would produce "3시간 14분 분".
+ */
+export function contextChips(context: DailyContextStats, lang: Lang): ContextChip[] {
+  const t = translator(lang);
+  return [
+    {
+      key: "weather",
+      glyph: WEATHER_GLYPHS[context.weather],
+      label: t("context.weather"),
+      value: weatherLabel(context.weather, lang),
+    },
+    {
+      key: "steps",
+      glyph: "👣",
+      label: t("context.steps"),
+      value: groupThousands(context.steps),
+      unit: t("context.unit.steps"),
+    },
+    {
+      key: "distance",
+      glyph: "📍",
+      label: t("context.distance"),
+      value: toTenth(context.distanceKm),
+      unit: t("context.unit.km"),
+    },
+    {
+      key: "screenTime",
+      glyph: "📱",
+      label: t("context.screen"),
+      value: screenTimeText(context.screenTimeMinutes, lang),
+    },
+  ];
 }

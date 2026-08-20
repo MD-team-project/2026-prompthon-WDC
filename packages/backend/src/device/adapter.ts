@@ -1,4 +1,4 @@
-import type { Capability, DeviceState, ProductId } from "@prompthon/shared";
+import type { Capability, DailyContext, DeviceState, ProductId } from "@prompthon/shared";
 import { config } from "../config.js";
 
 /**
@@ -6,6 +6,11 @@ import { config } from "../config.js";
  * the agent must go over HTTP to get device state, because DeviceState is
  * never held in this process's memory. That makes "displayed stats come
  * from the device, not the model" structural, not a matter of discipline.
+ *
+ * Today's app-level context (`getDailyContext`) is fetched the same way and
+ * for the same reason, even though it comes from mocked phone integrations
+ * rather than an appliance - a reason the character gives for a suggestion
+ * ("you walked 14,000 steps") has to be a value it read, not one it produced.
  */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${config.deviceApiUrl}${path}`, init);
@@ -34,5 +39,10 @@ export const deviceAdapter = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ capability, params }),
     });
+  },
+
+  /** Not product-scoped: one demo user, one reading, shared by all three characters. */
+  getDailyContext(): Promise<DailyContext> {
+    return request<DailyContext>("/context/today");
   },
 };

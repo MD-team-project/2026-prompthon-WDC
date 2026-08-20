@@ -8,10 +8,16 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { ActionResponse, Character, Skill, SkillDiscoveredEvent } from '@prompthon/shared';
+import type {
+  ActionResponse,
+  Character,
+  DailyContextStats,
+  Skill,
+  SkillDiscoveredEvent,
+} from '@prompthon/shared';
 import { initialState, reducer, activeSkills, statsFor, unseenTotalExcept, type State } from '../src/state';
 import { isSendable, normalizeInput, resolveLabel } from '../src/pure';
-import { attributeLabel, attributeValue } from '../src/strings';
+import { attributeLabel, attributeValue, contextChips } from '../src/strings';
 
 const shoecase: Character = {
   id: 'shoecase',
@@ -350,6 +356,75 @@ describe('generic attribute rendering', () => {
     expect(attributeValue('dry', 'ko')).toBe('건조');
     // An unknown value passes through, for the same reason unknown keys do.
     expect(attributeValue('turbo', 'ko')).toBe('turbo');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Today's context: the reason behind a recommendation, shown to the user.
+// ---------------------------------------------------------------------------
+
+describe("today's context", () => {
+  const rainyDay: DailyContextStats = {
+    weather: 'rain',
+    steps: 3_280,
+    distanceKm: 2.394,
+    screenTimeMinutes: 194,
+    observedAt: '2026-08-21T09:00:00Z',
+  };
+
+  it('formats each reading so it reads as the figure it is', () => {
+    const chips = contextChips({ ...rainyDay, steps: 14_260 }, 'ko');
+    const by = (key: string) => chips.find((c) => c.key === key)!;
+
+    expect(by('weather').value).toBe('비');
+    // Grouped, because "14260 걸음" is a number and "14,260 걸음" is a day's walking.
+    expect(by('steps').value).toBe('14,260');
+    expect(by('steps').unit).toBe('걸음');
+    expect(by('distance').value).toBe('2.4');
+    expect(by('distance').unit).toBe('km');
+    // 194 minutes is three and a bit hours, and that is how phone time is felt.
+    expect(by('screenTime').value).toBe('3시간 14분');
+    // No unit: "3시간 14분" already carries its own.
+    expect(by('screenTime').unit).toBeUndefined();
+  });
+
+  it('drops the hours part below an hour, in both languages', () => {
+    const brief = { ...rainyDay, screenTimeMinutes: 48 };
+    expect(contextChips(brief, 'ko').find((c) => c.key === 'screenTime')!.value).toBe('48분');
+    expect(contextChips(brief, 'en').find((c) => c.key === 'screenTime')!.value).toBe('48m');
+  });
+
+  it('is held once, not per character', () => {
+    let state = loaded();
+    state = reducer(state, { type: 'context/loaded', context: rainyDay });
+
+    // Switching character does not touch it: one user, one phone, one reading.
+    state = reducer(state, { type: 'character/select', characterId: 'pral' });
+    expect(state.dailyContext).toEqual(rainyDay);
+    expect(state.contextFailed).toBe(false);
+  });
+
+  it('keeps the last good reading when a refetch fails', () => {
+    let state = reducer(loaded(), { type: 'context/loaded', context: rainyDay });
+    state = reducer(state, { type: 'context/failed' });
+
+    // Blanking it would read as "you didn't move today", which is a claim the
+    // failure never made.
+    expect(state.dailyContext).toEqual(rainyDay);
+    expect(state.contextFailed).toBe(true);
+  });
+
+  it('reports a first-load failure as a failure, not as still loading', () => {
+    const state = reducer(loaded(), { type: 'context/failed' });
+    expect(state.dailyContext).toBeNull();
+    expect(state.contextFailed).toBe(true);
+  });
+
+  it('never lands in the device panel', () => {
+    // FE-R-1's neighbour: a phone reading and a device reading have separate
+    // destinations, and there is no action that can put one in the other's slot.
+    const state = reducer(loaded(), { type: 'context/loaded', context: rainyDay });
+    expect(statsFor(state, 'shoecase')).toBeNull();
   });
 });
 

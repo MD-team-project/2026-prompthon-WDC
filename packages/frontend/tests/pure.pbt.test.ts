@@ -11,9 +11,18 @@
 
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { INPUT_MAX_LENGTH, humanizeKey, normalizeInput, progressRatio, resolveLabel } from '../src/pure';
-import { strings } from '../src/strings';
-import { attributeKey, chatText, expPair } from './generators';
+import {
+  INPUT_MAX_LENGTH,
+  groupThousands,
+  humanizeKey,
+  normalizeInput,
+  progressRatio,
+  resolveLabel,
+  splitDuration,
+  toTenth,
+} from '../src/pure';
+import { contextChips, screenTimeText, strings } from '../src/strings';
+import { attributeKey, chatText, dailyContext, expPair, readingNumber } from './generators';
 
 describe('normalizeInput', () => {
   // Idempotence. The property that caught the real bug: without the trailing
@@ -77,6 +86,125 @@ describe('resolveLabel', () => {
       fc.property(attributeKey(), (key) => {
         fc.pre(key.length > 0);
         expect(resolveLabel(key, { [key]: 'Known' })).toBe('Known');
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Daily-context formatting. Today's figures are the REASON the character gives
+// for a recommendation, so a formatter that emits "NaN" or "-2시간" does not
+// merely look wrong - it undermines the one claim the panel is there to make.
+// ---------------------------------------------------------------------------
+
+describe('groupThousands', () => {
+  it('preserves the digits it was given, and only inserts commas', () => {
+    fc.assert(
+      fc.property(readingNumber(), (value) => {
+        const out = groupThousands(value);
+        if (!Number.isFinite(value)) {
+          expect(out).toBe('-');
+          return;
+        }
+        // Stripping the separators must give back the rounded magnitude - a
+        // grouping bug that drops or duplicates a digit changes the number.
+        expect(out.replace(/,/g, '').replace(/^-/, '')).toBe(String(Math.round(Math.abs(value))));
+      }),
+    );
+  });
+
+  it('groups in threes from the right, with no leading or doubled comma', () => {
+    fc.assert(
+      fc.property(readingNumber(), (value) => {
+        fc.pre(Number.isFinite(value));
+        const digits = groupThousands(value).replace(/^-/, '');
+        expect(digits.startsWith(',')).toBe(false);
+        expect(digits.endsWith(',')).toBe(false);
+        expect(digits).not.toContain(',,');
+        for (const group of digits.split(',').slice(1)) {
+          expect(group).toHaveLength(3);
+        }
+      }),
+    );
+  });
+});
+
+describe('toTenth', () => {
+  it('keeps exactly one decimal place and stays within rounding distance', () => {
+    fc.assert(
+      fc.property(readingNumber(), (value) => {
+        const out = toTenth(value);
+        if (!Number.isFinite(value)) {
+          expect(out).toBe('-');
+          return;
+        }
+        // "5.0" rather than "5": a distance that drops its decimal reads as a
+        // different precision than the one beside it.
+        expect(out).toMatch(/^-?\d+\.\d$/);
+        // Half a tenth is the most rounding can move a value. The epsilon is
+        // for the exact-half case: 0.95 rounds to 1.0 and the difference
+        // measures as 0.050000000000000044 in binary floating point, which is
+        // the representation talking, not the function being wrong.
+        expect(Math.abs(Number(out) - value)).toBeLessThanOrEqual(0.05 + Number.EPSILON * 16);
+      }),
+    );
+  });
+});
+
+describe('splitDuration', () => {
+  it('never produces a negative or overflowing minute count', () => {
+    fc.assert(
+      fc.property(readingNumber(), (value) => {
+        const { hours, minutes } = splitDuration(value);
+        expect(Number.isInteger(hours)).toBe(true);
+        expect(Number.isInteger(minutes)).toBe(true);
+        expect(hours).toBeGreaterThanOrEqual(0);
+        // 90 minutes must be "1시간 30분", never "0시간 90분".
+        expect(minutes).toBeGreaterThanOrEqual(0);
+        expect(minutes).toBeLessThan(60);
+      }),
+    );
+  });
+
+  it('conserves the total for any real reading', () => {
+    fc.assert(
+      fc.property(readingNumber(), (value) => {
+        fc.pre(Number.isFinite(value) && value > 0);
+        const { hours, minutes } = splitDuration(value);
+        expect(hours * 60 + minutes).toBe(Math.round(value));
+      }),
+    );
+  });
+});
+
+describe('contextChips', () => {
+  it('always yields all four readings, in a stable order, none blank', () => {
+    fc.assert(
+      fc.property(dailyContext(), fc.constantFrom('ko' as const, 'en' as const), (context, lang) => {
+        const chips = contextChips(context, lang);
+        // Four fixed integrations, so four chips - a reading that silently went
+        // missing would leave the character citing a figure nothing displays.
+        expect(chips.map((c) => c.key)).toEqual(['weather', 'steps', 'distance', 'screenTime']);
+        for (const chip of chips) {
+          expect(chip.label.length).toBeGreaterThan(0);
+          expect(chip.value.length).toBeGreaterThan(0);
+          expect(chip.value).not.toContain('NaN');
+          expect(chip.value).not.toContain('undefined');
+        }
+      }),
+    );
+  });
+
+  it('states the screen time in whichever language is active', () => {
+    fc.assert(
+      fc.property(dailyContext(), (context) => {
+        const { hours, minutes } = splitDuration(context.screenTimeMinutes);
+        expect(screenTimeText(context.screenTimeMinutes, 'ko')).toBe(
+          hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`,
+        );
+        expect(screenTimeText(context.screenTimeMinutes, 'en')).toBe(
+          hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
+        );
       }),
     );
   });
