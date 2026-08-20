@@ -4,17 +4,17 @@
 - **Project Name**: prompthon
 - **Project Type**: Greenfield
 - **Start Date**: 2026-08-19T07:27:43Z
-- **Current Phase**: INCEPTION
-- **Current Stage**: Requirements Analysis
+- **Current Phase**: CONSTRUCTION
+- **Current Stage**: INFRA unit COMPLETE and APPROVED 2026-08-20T11:40:00Z. Next: BE and FE Code Generation, then joint Build and Test
 - **Rule Details Directory**: `.kiro/aws-aidlc-rule-details/`
 
 ## Workspace State
 - **Existing Code**: No
 - **Programming Languages**: None detected
 - **Build System**: None detected
-- **Project Structure**: Empty (documentation and tooling scaffolding only)
+- **Project Structure**: Root npm workspace + `infra/` CDK workspace (created 2026-08-20T10:15:00Z). `packages/*` still empty, owned by BE and FE
 - **Reverse Engineering Needed**: No (greenfield)
-- **Workspace Root**: `/Users/sehoonbyun/Documents/prompthon`
+- **Workspace Root**: `/Users/hyunjin/prompthon/2026-prompthon-WDC` (corrected 2026-08-20T10:36:00Z; the previous value `/Users/sehoonbyun/Documents/prompthon` was a different machine)
 
 ### Detection Details
 - No `aidlc-docs/aidlc-state.md` existed prior to this run, so this is a new project rather than a resumed session.
@@ -47,11 +47,11 @@ Opt-in questions are presented in `aidlc-docs/inception/requirements/requirement
 - [x] Requirements Analysis (APPROVED 2026-08-20T02:22:47Z; requirements.md merged to main via PR #4)
 - [x] User Stories (APPROVED 2026-08-20T03:31:18Z after 4 revisions. 9 stories, 2 personas)
 - [x] Workflow Planning (**APPROVED** 2026-08-20T04:26:14Z, execution-plan.md rev 5)
-- [x] Application Design - **collapsed to a short decision record, awaiting approval**. Detailed interface contract discarded 2026-08-20T07:14:09Z
+- [x] Application Design - **APPROVED 2026-08-20T07:34:07Z**, collapsed to a short decision record. Detailed interface contract discarded 2026-08-20T07:14:09Z
 - [x] Units Generation - **COMPLETE and APPROVED** 2026-08-20T07:41:33Z, minimal depth. 3 units: INFRA, BE, FE. Planning questions skipped as already answered by prior stages
 
-### CONSTRUCTION PHASE - runs per unit in parallel
-- [ ] INFRA: Functional Design -> Code Generation
+### CONSTRUCTION PHASE - IN PROGRESS, runs per unit in parallel
+- [x] **INFRA: COMPLETE.** Functional Design APPROVED 2026-08-20T09:07:10Z -> Code Generation **APPROVED 2026-08-20T11:40:00Z**, deployed and verified against the live account. See the INFRA deployed-runtime section below
 - [x] **BE: Functional Design COMPLETE** 2026-08-20T09:41:52Z. Closed on structural decisions S1-S7; the plan file at `construction/plans/be-functional-design-plan.md` is the artifact. Domain artifacts deliberately not generated - domain specifics are parked and get decided against real code
 - [ ] **BE: Code Generation - plan created, awaiting approval.** `construction/plans/be-code-generation-plan.md`, 15 steps plus Step 0
 - [ ] FE: Functional Design -> Code Generation
@@ -83,13 +83,10 @@ Q5 document rewrite semantics · Q6 skills per run · Q7 placeholder capability 
 **How each owner starts**: on their own branch, open a session and say
 `AI-DLC Construction, {INFRA|BE|FE} 담당` .
 The agent reads `aidlc-state.md` for that unit's scope and constraints, then runs Functional Design followed by Code Generation.
-- [ ] Workflow Planning
-- [ ] Application Design (not yet assessed)
-- [ ] Units Generation (not yet assessed)
 
-### CONSTRUCTION PHASE
-- [ ] Per-Unit Loop (Functional Design / NFR Requirements / NFR Design / Infrastructure Design / Code Generation)
-- [ ] Build and Test
+**INFRA branch `construction/infra` created 2026-08-20T08:55:00Z.** Environment survey and Functional Design are complete; Code Generation has not started. Read the account-deletion and measured-environment sections below before doing any INFRA work - they contain facts that no other artifact carries.
+
+*(Removed here: a duplicated set of empty Workflow Planning / Application Design / Units Generation / Per-Unit Loop checkboxes that contradicted the completed entries above. All four are already tracked correctly earlier in this section.)*
 
 ### OPERATIONS PHASE
 - [ ] Operations (PLACEHOLDER)
@@ -152,8 +149,152 @@ The agent reads `aidlc-state.md` for that unit's scope and constraints, then run
 - **Two mandatory integration checkpoints**: 5.5h (thin end-to-end) and 9.0h (full demo path). The 5.5h one is the single most important line in the plan
 - **Drop order if time runs short**: voice input, then cosmetic evolution, then English toggle
 
+## HARD CONSTRAINT - AWS account is deleted in 3 days (2026-08-20T08:45:00Z)
+
+Set by user directive. The account is destroyed around **2026-08-23**, which changes IaC from an optional convenience into a first-class deliverable. `execution-plan.md` frames deployment as "conditional on time remaining"; **that framing no longer covers this** and IaC portability is now required regardless of whether the app is ever deployed.
+
+**Decision: AWS CDK in TypeScript**, `infra/` workspace inside the existing monorepo, `aws-cdk-lib` pinned at 2.266.0.
+- Terraform was seriously considered and wins on exactly one axis: CDK needs `cdk bootstrap` per account and region, which creates a CDKToolkit stack (S3 bucket, ECR repo, SSM parameter, five IAM roles) that dies with the account and must be re-established in any future one. Terraform has no equivalent prerequisite.
+- CDK chosen anyway because the resource surface is small enough that expressiveness is a wash, the toolchain is already verified working, and TypeScript keeps IaC inside the monorepo's existing typecheck and test pipeline instead of adding HCL as a second language against a ~3 hour budget.
+- **Revisit if the next account is corporate**, where IAM role creation may need approval. For a personal or another Workshop Studio account, bootstrap is a non-issue.
+
+**What IaC cannot capture, and therefore must be written down.** This matters more for reuse than the tool choice:
+1. **Bedrock model access is not IaC-manageable.** No entitlement or model-access API exists in the Bedrock CLI, and no CloudFormation or Terraform resource covers it. It is a console action. Not hypothetical - see the measured entitlements below. A future account will apply the IaC perfectly and still fail to run the app, and that failure appears nowhere in the IaC logs.
+2. `FRIENDLI_API_KEY` is outside AWS entirely.
+3. The region lock and `iam:PassRole` whitelist are account-attached policies rather than our code, and may differ in the next account.
+
+**Required deliverable**: `infra/README.md` carrying a prerequisite checklist - Bedrock model IDs to enable, required region, required IAM permissions, environment variable names.
+
+**Required before the account dies**: `cdk bootstrap` and `cdk deploy` must be run to completion at least once. IaC that has never been applied is an unverified draft, not a reusable asset, and after deletion there is no environment left to verify it against.
+
+---
+
+## Measured Environment Facts (2026-08-20T08:12:00Z)
+
+Probed against the live account, not inferred from documents. Full detail in `audit.md`.
+
+**Account** `643922457910`, `WSParticipantRole` (Workshop Studio), profile `prompthon`, region `us-east-1`.
+
+**Permission boundary**
+- **Region lock**: everything outside `us-east-1` denied, with a NotAction exception list including `bedrock:Invoke*`, `s3:*`, `iam:*`. DynamoDB, Transcribe and EC2 are us-east-1 only.
+- `iam:CreateRole` and `iam:CreatePolicy` allowed. **`iam:CreateUser` is not.**
+- **`iam:PassRole` restricted to**: lambda, ec2, apigateway, events, scheduler, rds, dynamodb, cloudformation, bedrock. **`ecs-tasks.amazonaws.com` absent, so ECS/Fargate is unavailable.** EC2 as the conditional deploy target is correct by necessity, not just preference.
+
+**Bedrock model access - full census by real Converse calls, 2026-08-20T09:10:00Z**
+
+Bedrock lists 121 models here, of which 88 are text-in/text-out. Probing every non-provisioned candidate: **59 invoke successfully, 49 of those support tool calling**, 14 are blocked. The listing is not the availability, so trust this census rather than `ListFoundationModels`.
+
+**Critical gotcha**: most current models are `INFERENCE_PROFILE` only and **must be called with the `us.` or `global.` prefix**. The bare ID fails with "Invocation of model ID ... with on-demand throughput isn't supported". Verified: `anthropic.claude-sonnet-4-5-20250929-v1:0` fails, `us.anthropic.claude-sonnet-4-5-20250929-v1:0` works.
+
+**Tool-calling capable (49) - the only ones usable for Agentic Control**
+
+| Provider | Invoke IDs |
+|---|---|
+| Anthropic (6) | `us.anthropic.claude-sonnet-4-5-20250929-v1:0`, `us.anthropic.claude-sonnet-4-6`, `us.anthropic.claude-haiku-4-5-20251001-v1:0`, `us.anthropic.claude-opus-4-1-20250805-v1:0`, `us.anthropic.claude-opus-4-5-20251101-v1:0`, `us.anthropic.claude-opus-4-6-v1` |
+| Amazon (4) | `amazon.nova-micro-v1:0`, `amazon.nova-lite-v1:0`, `amazon.nova-pro-v1:0`, `us.amazon.nova-2-lite-v1:0` |
+| Meta (5) | `us.meta.llama3-1-8b-instruct-v1:0`, `us.meta.llama3-1-70b-instruct-v1:0`, `us.meta.llama3-3-70b-instruct-v1:0`, `us.meta.llama4-scout-17b-instruct-v1:0`, `us.meta.llama4-maverick-17b-instruct-v1:0` |
+| Mistral (10) | `mistral.ministral-3-3b-instruct`, `mistral.ministral-3-8b-instruct`, `mistral.ministral-3-14b-instruct`, `mistral.mistral-small-2402-v1:0`, `mistral.mistral-large-2402-v1:0`, `mistral.mistral-large-3-675b-instruct`, `mistral.devstral-2-123b`, `us.mistral.pixtral-large-2502-v1:0`, `mistral.voxtral-mini-3b-2507`, `mistral.voxtral-small-24b-2507` |
+| Qwen (5) | `qwen.qwen3-32b-v1:0`, `qwen.qwen3-next-80b-a3b`, `qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-coder-next`, `qwen.qwen3-vl-235b-a22b` |
+| OpenAI OSS (4) | `openai.gpt-oss-20b-1:0`, `openai.gpt-oss-120b-1:0`, `openai.gpt-oss-safeguard-20b`, `openai.gpt-oss-safeguard-120b` |
+| NVIDIA (4) | `nvidia.nemotron-nano-9b-v2`, `nvidia.nemotron-nano-12b-v2`, `nvidia.nemotron-nano-3-30b`, `nvidia.nemotron-super-3-120b` |
+| Z.AI (3) | `zai.glm-4.7`, `zai.glm-4.7-flash`, `zai.glm-5` |
+| MiniMax (3) | `minimax.minimax-m2`, `minimax.minimax-m2.1`, `minimax.minimax-m2.5` |
+| Moonshot (2) | `moonshot.kimi-k2-thinking`, `moonshotai.kimi-k2.5` |
+| Writer (2) | `us.writer.palmyra-x4-v1:0`, `us.writer.palmyra-x5-v1:0` |
+| DeepSeek (1) | `deepseek.v3.2` |
+
+**Invokes but no tool calling (10) - unusable for Agentic Control**: `us.deepseek.r1-v1:0`, `meta.llama3-8b-instruct-v1:0`, `meta.llama3-70b-instruct-v1:0`, `mistral.mistral-7b-instruct-v0:2`, `mistral.mixtral-8x7b-instruct-v0:1`, `writer.palmyra-vision-7b` all reject `toolConfig` outright. `google.gemma-3-4b-it`, `gemma-3-12b-it`, `gemma-3-27b-it`, `mistral.magistral-small-2509` accept it but answer in prose instead of calling the tool.
+
+**Blocked entirely (14)**
+- Legacy or end-of-life (5): `anthropic.claude-3-haiku-20240307-v1:0`, `us.anthropic.claude-sonnet-4-20250514-v1:0`, `us.amazon.nova-premier-v1:0`, `ai21.jamba-1-5-mini-v1:0`, `ai21.jamba-1-5-large-v1:0`. Claude 3.5 Haiku is end-of-life.
+- Not entitled to this account (9): `us.anthropic.claude-sonnet-5`, `us.anthropic.claude-opus-5`, `us.anthropic.claude-opus-4-7`, `us.anthropic.claude-opus-4-8`, `us.anthropic.claude-fable-5`, `us.openai.gpt-5.6-luna`, `us.openai.gpt-5.6-sol`, `us.openai.gpt-5.6-terra`, `us.xai.grok-4.6`.
+
+**DECISION for Agentic Control (revised 2026-08-20T09:40:00Z, user directive)**: default is **`us.anthropic.claude-opus-4-6-v1`**, with `us.anthropic.claude-haiku-4-5-20251001-v1:0` as the documented fallback and `amazon.nova-lite-v1:0` as the cheap floor.
+
+**The model ID must be an environment variable** (`BEDROCK_MODEL_ID`), not a literal. This is what makes the choice cheap: if Opus feels slow during rehearsal, reverting to Haiku is a config flip rather than a code change. INFRA owns this in the environment contract.
+
+**Streaming condition - SATISFIED** (user confirmed 2026-08-20T09:50:00Z: chat replies are streamed). Opus 4.6 takes ~4.1s for a 2-3 sentence Korean reply against Haiku's 2.9s, which reads as the character speaking when streamed and would be four seconds of blank screen if it were not. Use `ConverseStream`. If streaming is ever dropped, revert `BEDROCK_MODEL_ID` to Haiku 4.5.
+
+**NFR-4.2 is moot for character art** (user confirmed 2026-08-20T09:50:00Z): level-up art uses pre-made character animation files, not runtime generation. The clause's only concrete example is therefore already satisfied by design, which is consistent with withdrawing it as a latency argument against Opus.
+
+Also cap `maxTokens` around 300 and instruct 2-3 sentences in the system prompt. Opus's wall clock is competitive precisely because it answers tersely, so pin that with the prompt rather than relying on it.
+
+**Latency measured 2026-08-20T09:25:00Z** on a realistic request - Korean character prompt, two tool definitions, tool call completed. Median of 3, so differences among Haiku/Sonnet/Opus are partly noise; the tokens-per-second ordering is the reliable signal.
+
+| Model | Wall clock | Output tokens | Tokens/s | Tool call |
+|---|---|---|---|---|
+| `amazon.nova-lite-v1:0` | 1.11s | 104 | **94** | 3/3 |
+| `amazon.nova-pro-v1:0` | 1.53s | 134 | 88 | 3/3 |
+| **`us.anthropic.claude-haiku-4-5`** | 1.87s | 140 | **75** | 3/3 |
+| `us.anthropic.claude-opus-4-6-v1` | 2.03s | 76 | 37 | 3/3 |
+| `us.anthropic.claude-opus-4-5` | 2.06s | 75 | 36 | 3/3 |
+| `us.anthropic.claude-sonnet-4-6` | 2.42s | 117 | 48 | 3/3 |
+| `us.anthropic.claude-sonnet-4-5` | 3.05s | 93 | 30 | 3/3 |
+
+No throttling at 8 concurrent requests for either Opus 4.6 or Haiku 4.5, though concurrent calls queue to ~4.4s and ~3.3s respectively. Irrelevant for a single-operator demo.
+
+**History of the Opus 4.6 decision.** It was first recommended against at 09:25, then **adopted at 09:40**. The reversal is recorded with the reasoning because two of the three original objections did not survive scrutiny.
+
+- ~~NFR-4.2 points the other way.~~ **Overstated and withdrawn.** NFR-4.2's own example is character art generated on level-up, so it targets slow generation that *blocks* a visible interaction, not the latency of the reply that *is* the interaction. Reading it as a latency budget for chat replies stretched the clause.
+- ~~It blurs the two-model rationale.~~ **Partly withdrawn.** Agentic Control being BASELINE describes the depth of the *control* capability. The character's voice and personality come through the same model, and for a product selling an "AI-characterized companion" that is product value rather than plumbing. A stronger model writing better Korean character dialogue is a legitimate argument in favour.
+- **The task does not need that tier - still true.** Even Nova Lite chose the right tool and extracted arguments correctly 3/3. Opus buys nothing on tool selection. It buys dialogue quality, which is a different and valid reason.
+
+What the measurements actually showed, none of it disqualifying: tool calling 3/3, no throttling at 8 concurrent, terser output than Haiku (76 tokens vs 140), and cost negligible in absolute terms at demo volume despite being roughly 20x Haiku per token. The single real cost is per-token throughput at 37/s against Haiku's 75/s, which is why the streaming condition above is binding rather than advisory.
+
+Opus also remains a good build-time tool for authoring persona prompts and fixture patterns, which is not a runtime dependency and does not enter the environment contract.
+
+**This census does not transfer to a new account.** Entitlements are per-account, which is exactly why the account-deletion section requires them written into `infra/README.md`.
+
+**Account contents** (as measured at 08:12, ~~superseded by the deployment below~~): DynamoDB 0 tables. S3 0 buckets, so **CDK is not bootstrapped**. Default VPC `vpc-0e879b6764ca8fc90`. Transcribe reachable. Monorepo **not** initialised despite `unit-of-work.md` claiming otherwise - no root `package.json`, no `packages/`.
+
+**Corrected 2026-08-20T10:36:00Z**: CDK **is** now bootstrapped and the runtime stack is deployed. The root npm workspace and `infra/` exist. DynamoDB is still 0 tables, and that is deliberate, not pending setup. `packages/` is still absent and belongs to BE and FE.
+
+**Pre-existing stack `bedrock-apikey`** (created 2026-08-19T02:29Z, before this project). IAM user plus a Bedrock bearer token exposed in plaintext as a stack Output; credential self-expires 2026-08-24. **Decision: leave untouched, do not use.** Profile credentials already work so the token is a redundant auth path, and deletion is irreversible because `iam:CreateUser` is not granted. **Never copy that token into a document or commit** - the copy would be the actual NFR-1.1 violation, not the stack.
+
+**Local toolchain**: **Node 22.23.2** (npm 10.9.8). Upgraded from 20.20.2 because `@langchain/openai@1.5.9` requires `node >=22`, and that package is the mandated EXAONE/Friendli path. Installed via Homebrew with `node@20` unlinked and `node@22` linked, so all execution contexts agree. Full dependency set verified to resolve with no peer conflicts. **pnpm and Docker deliberately not installed** - npm workspaces satisfies the settled monorepo decision, and nothing in this phase needs Docker. Pin `typescript` at `^5.9.3`; latest is now 7.0.2, the native-port rewrite, too new for this clock.
+
+---
+
+## INFRA Deployed Runtime (2026-08-20T10:36:00Z) - the account-deletion requirement is SATISFIED
+
+`cdk bootstrap` and `cdk deploy` have both **actually run to completion** against the live account, so `infra/` is a verified reusable asset rather than an unapplied draft. Full handoff in `aidlc-docs/construction/infra/code/runtime-contract.md`; evidence in `deployment-evidence.md` beside it.
+
+| Item | Value |
+|---|---|
+| Stack | `prompthon-runtime` (`UPDATE_COMPLETE`, `cdk diff` clean) |
+| EC2 | `i-0ede6aab809e7c1b0`, `t3.small`, AL2023, `us-east-1a`, running |
+| Role | `prompthon-runtime-BackendRole78202DE5-AcROqSKNntXL` |
+| Security group | `sg-0715b9fa40c2c378d` — **zero inbound rules** |
+| Management | SSM Session Manager, agent `Online`. No key pair, no SSH port, IMDSv2 required |
+| Role actions | `ssm:GetParameter` (one exact parameter ARN), `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `transcribe:StartStreamTranscription` |
+| DynamoDB | `prompthon-runtime-AppTable815C50BC-1O831W9BLPJNG`, `ACTIVE`. **Partition key `id` (String) only**, no sort key, on-demand, 0 indexes. Added 11:55Z, key schema corrected against BE's PR #7 at 12:10Z |
+| Bootstrap | `CDKToolkit` created. Account-level, dies with the account, must be re-run in any future account |
+
+**Bedrock IAM actions, corrected 2026-08-20T11:05:00Z.** An earlier version of this section claimed `bedrock:Converse` and `bedrock:ConverseStream` are not IAM action names. **That was wrong** — they exist. The rule depends on direction:
+
+- **Allow**: `bedrock:InvokeModel` + `bedrock:InvokeModelWithResponseStream` are sufficient. Converse depends on Invoke, so it works without a separate grant. **Verified empirically**: the deployed role holds only those two actions and a `bedrock-runtime converse` call from the instance succeeded.
+- **Deny**: denying `InvokeModel` already blocks Converse. [AWS documents `bedrock:InvokeModel*` as a wildcard, or adding `bedrock:Converse` and `bedrock:ConverseStream` to the action list, when you want the denial written out explicitly](https://docs.aws.amazon.com/bedrock/latest/userguide/security_iam_id-based-policy-examples.html). *(Content rephrased for compliance with licensing restrictions.)*
+
+Removing them from the Allow policy was still correct, because there they granted nothing. Do not carry the "not an IAM action" claim into a Deny policy.
+
+**Cost**: roughly $0.023/hr. Stopping the instance while idle is enough; do not `cdk destroy`, because that discards the verified deploy this whole constraint existed to obtain.
+
 ## Next Step
-**INCEPTION complete and approved. CONSTRUCTION is WAITING for the three owners to start in parallel.**
+**CONSTRUCTION is IN PROGRESS. INFRA Code Generation is complete and deployed, awaiting the user's review approval. BE and FE have not started.**
+
+**What BE needs from INFRA is now published.** Read `aidlc-docs/construction/infra/code/runtime-contract.md`. It carries a **MANDATORY for BE** section with five blocking items found by reviewing PR #7: `DDB_TABLE_NAME` must be set (the `prompthon-local` default does not exist), `engines.node` must be `>=22` not `>=20` because `@langchain/openai@^1.5.9` requires it, root `workspaces` must include `infra` or CDK dependencies stop installing, `.env-example` is missing the boot-required `FRIENDLI_ENDPOINT_ID`, and on EC2 the Friendli key comes from SSM rather than `.env`.
+
+**DynamoDB handoff simplified 2026-08-20T11:10:00Z, then resolved 2026-08-20T11:55:00Z, both by user directive.** The seven-field access-pattern contract (caller, operation, owner boundary, consistency, fields, result bound, RPS) was **withdrawn as over-process for a demo**. Then the table was **created up front** rather than waiting on BE at all.
+
+**Corrected 2026-08-20T12:10:00Z against BE's PR #7.** The table was first created with `pk`/`sk` on the reasoning that a meaning-neutral base key cannot be wrong later. Reading BE's `packages/backend/src/data/skills.ts` showed it addresses items by **`id` alone**, so every `Key: { id }` call would have failed with `ValidationException`. The table was replaced, empty, to match. **BE's data-access code is the contract**, and the earlier `pk`/`sk` reasoning was solving a problem this codebase does not have: usage events stay in memory by BE's own deferral, so skills are the only thing persisted, read by id plus a `Scan` filter.
+
+**Table names must not be fixed.** `tableName: 'prompthon-app'` made the first replacement attempt fail outright — CloudFormation cannot replace a custom-named resource because it would create the replacement before deleting the original and the names collide. The name is now generated and travels as `DDB_TABLE_NAME`.
+
+**Still binding**: keys come from a server-generated value, never a client-supplied identifier. BE satisfies this with `randomUUID()`.
+
+**GSIs remain absent** and are added one per deploy when a lookup needs one — CloudFormation refuses more than a single index change per stack update. LSIs are excluded permanently since they cannot be added after table creation.
+
+**Friendli handoff to BE**: the actual `FRIENDLI_API_KEY` value is intentionally unread and unverified by INFRA. BE must confirm it in its own local environment and run the four first-hour checks below.
 
 Before anyone writes code, run the four first-hour verifications. The first one can invalidate BE's architecture:
 1. **Tool calling on the *dedicated* Friendli endpoint.** Failure means rework, not adjustment. Documentation found covers serverless endpoints only.
@@ -198,7 +339,7 @@ The scaffolding phase exists to make later per-product phases cheap: once the pi
 
 ## MANDATORY CONSTRAINT - EXAONE via Friendli (2026-08-20T04:52:07Z)
 Hackathon requirement. **EXAONE is the required model**, text input only, served over Friendli's OpenAI-compatible chat/completions at `api.friendli.ai/dedicated/v1`.
-- **Bedrock removed from the runtime.** AWS surface narrows to DynamoDB and Transcribe.
+- ~~**Bedrock removed from the runtime.** AWS surface narrows to DynamoDB and Transcribe.~~ **SUPERSEDED** by the 05:14:22Z two-model split and by `application-design.md` section 5 (07:14:09Z), both of which keep Bedrock for Agentic Control. **Bedrock is in the runtime. AWS surface is Bedrock + DynamoDB + Transcribe.** Confirmed against the live account 2026-08-20T08:12:00Z - Bedrock reachable, tool calling working.
 - **Wrapped as `ChatOpenAI` with `baseURL` overridden** - no custom LangChain integration needed, so `createAgent`, middleware, tool binding, and the LangGraph discovery workflow all work unchanged. Single construction site at `packages/backend/src/model/exaone.ts`.
 - **`chat_template_kwargs` goes through `modelKwargs`**, since it is not an OpenAI parameter.
 - Two instances: `exaoneChat` (thinking off, control path), `exaoneReasoning` (thinking on, discovery).
