@@ -110,15 +110,29 @@ stutter. Trigger both effects once before presenting and the cache handles it.
 
 ## Notes for BE
 
-Two asks are structural rather than cosmetic, because they change FE's shape
-rather than its parsing:
+One ask is structural rather than cosmetic, because it changes FE's shape rather
+than its parsing:
 
-1. **One SSE stream for all three characters**, each event naming its
-   `characterId`. A per-character stream cannot deliver an announcement for a
-   character the user is not viewing, and the roster badge depends on that.
-2. **`deviceState` always a separate field from reply text.** FE enforces FR-5.5
+1. **`deviceState` always a separate field from reply text.** FE enforces FR-5.5
    by having no function that turns a string into stats, which only holds if the
    response separates them.
 
 Everything else - route paths, payload shapes, event names - is a proposal. Change
 what is wrong.
+
+### Settled: the events transport is per-character
+
+FE originally asked for one combined SSE stream and claimed per-character streams
+could not support the roster badge. That was wrong, and it is settled as of PR #8.
+
+BE serves `GET /api/characters/:productId/events`, one router and one dedicated
+agent per product, which FR-5.4's 1:1:1 binding requires. FE opens one
+`EventSource` per character, all at app mount rather than on a character screen -
+which is what the badge actually needs. Connection count was never the issue;
+connection *ownership* was. Nothing about the badge changed and no BE change is
+needed here.
+
+The banner shows one status for three connections: `onOpen` waits for all of them,
+and any single drop shows it. So one character's channel failing looks like a
+total outage - accepted, because the banner only claims that announcements may be
+missing, which is true either way.

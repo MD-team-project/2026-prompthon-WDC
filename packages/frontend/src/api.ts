@@ -16,6 +16,9 @@
  * The real client below is written against BE's ACTUAL contract, not FE's
  * original proposal in `aidlc-docs/construction/fe/functional-design/
  * backend-mock-contract.md` - see `packages/backend` on `construction/be` (PR #7).
+ * BE's own capture of its real request/response/SSE shapes is in
+ * `aidlc-docs/construction/be/code/api-examples.md` on that branch, which is the
+ * source to reconcile `packages/shared/src/types.ts` against.
  * Three real gaps in that contract, and how this file bridges them:
  *
  *   1. No `/api/characters` route, no progression, no per-product tier/status -

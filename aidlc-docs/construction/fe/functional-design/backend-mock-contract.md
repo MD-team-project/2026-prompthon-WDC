@@ -34,13 +34,17 @@ Everything below is shape, and shape is negotiable.
 
 These two change FE's architecture rather than its parsing, so they are worth settling first.
 
-### Ask 1: one SSE stream for all three characters
+### Ask 1: one SSE stream for all three characters - RESOLVED, and the ask was wrong
 
-`GET /api/events` carries events for every character, each event naming its `characterId`.
+**Settled on PR #8. BE serves per-character routes and FE adapted with no behaviour change. The original ask is left below because its reasoning contained a factual error worth not repeating.**
 
-**Why**: an announcement can arrive for a character the user is not looking at, and FE raises a badge for it (Q14 B). A per-character stream opened when a character screen mounts cannot deliver that event at all. It also gives the connection banner a single status instead of three.
+The ask was: `GET /api/events` carries events for every character, each event naming its `characterId`. The reason given was that an announcement can arrive for a character the user is not looking at and FE raises a badge for it (Q14 B), so - the ask claimed - *a per-character stream cannot deliver that event at all*, and per-character streams would force FE's badge behaviour to change and Q14 to be revisited.
 
-If BE would rather serve per-character streams, FE's badge behaviour has to change and Q14 needs revisiting.
+**That claim was false.** What cannot deliver the event is a stream *opened when a character screen mounts*. Whether there is one stream or three is a separate question, and FE conflated them. `connectEvents` opens all three connections at app mount and returns a single disconnect function; every character's events arrive regardless of what is on screen. Q14 stands, the badge is unchanged, FE-R-27's actual intent - not reachable from a character screen - holds.
+
+**What BE serves** (`GET /api/characters/:productId/events`, one router per product, one dedicated agent behind each) is also not a matter of preference: FR-5.4 requires strict 1:1:1 agent/character/device binding, so no single agent ever existed that could have served a combined stream. The ask was asking for something the architecture had already ruled out upstream.
+
+The one real cost is the part of the ask that was correct: a single connection would have given the banner one status instead of three. FE collapses the three into one - `onOpen` waits for all, any drop shows the banner - so one character's channel failing reads as a total outage. Accepted, because the banner's claim is "announcements may be missing", which is true either way.
 
 ### Ask 2: `deviceState` is a separate field from reply text, in every response that can change state
 
@@ -155,7 +159,15 @@ One REST route rather than a WebSocket, per Q10 C. FE places the transcript in t
 
 ### `GET /api/events` - SSE
 
-One connection, opened at app mount, all three characters.
+**Superseded. BE serves `GET /api/characters/:productId/events`; see Ask 1 above.** The proposal below is what the mock still implements, so it is kept rather than deleted - but for the real wire shapes use `aidlc-docs/construction/be/code/api-examples.md`, which is a capture of BE actually running rather than FE's guess.
+
+Three differences that matter to anyone reading this as if it were current:
+
+- The event is a `data:`-only frame carrying `{"type":"skillDiscovered", ...}`, not a named `event: skill_discovered`. FE dispatches on the `type` field.
+- The payload is `{ type, productId, skill }` where `skill` is a **summary without `content`**. FE fetches the full record to get the reason.
+- There is no `message` and no `progression`. BE's discovery graph produces no user-facing prose for this moment, so the announcement caption is FE's own wording, and there is no progression concept on BE at all.
+
+FE's original proposal:
 
 ```
 event: skill_discovered

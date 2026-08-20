@@ -10,7 +10,11 @@
  *            hold when responses land in one reducer and impossible to police
  *            when they land anywhere.
  *
- * FE-R-27: the SSE connection is opened once here, not per character screen.
+ * FE-R-27: the SSE connections are opened once here, not per character screen.
+ *          BE's events route is per-product, so there are three of them - but the
+ *          rule is about ownership, not count. A connection opened by a mounting
+ *          character screen cannot deliver an announcement for a character the
+ *          user is not viewing, and the roster badge depends on exactly that.
  */
 
 import { useEffect, useMemo, useReducer, useRef } from 'react';
@@ -81,7 +85,9 @@ export function App() {
     }
   }, []);
 
-  // One connection, all three characters, opened once.
+  // All characters' event connections, opened once here and torn down together.
+  // `onOpen` fires only when every one of them is up, so `sse` is the weakest of
+  // the three rather than the first to connect.
   useEffect(() => {
     const disconnect = api.connectEvents({
       onAnnouncement: (event) => dispatch({ type: 'sse/announcement', event }),

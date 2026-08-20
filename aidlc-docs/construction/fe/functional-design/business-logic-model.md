@@ -36,13 +36,14 @@ The character is the centre and chat is secondary but always reachable. This is 
 ## 2. Flow: application load
 
 ```
-+-------------+     +------------------+     +--------+
-| app mounts  | --> | open SSE (one)   | --> | roster |
-+-------------+     +------------------+     +--------+
++-------------+     +---------------------+     +--------+
+| app mounts  | --> | open SSE (one per   | --> | roster |
+|             |     | character, 3 total) |     |        |
++-------------+     +---------------------+     +--------+
 ```
 
 1. Read `lang` from `localStorage`, default `ko` (FR-8.1).
-2. Open the single app-wide SSE connection (FE-R-27). Set `sse` to `connecting`, then `open`.
+2. Open the SSE connections (FE-R-27). One per character, all opened at app mount. Set `sse` to `connecting`, then `open` once every connection is up.
 3. Fetch the three characters, including level and exp.
 4. Render the roster. No login step (FR-7.3).
 
@@ -120,7 +121,9 @@ Voice is first in the drop order, so this flow is built as an addition that can 
 
 ## 6. Flow: an announcement arrives
 
-The only server-initiated flow. One SSE stream carries events for all three characters, and the event's `characterId` decides what happens.
+The only server-initiated flow. BE serves one SSE route per character (`GET /api/characters/:productId/events`), so FE holds three connections, all opened at app mount rather than by a character screen. Which character an event belongs to is therefore known from the connection it arrived on, and the flow below is the same either way.
+
+**What matters is not the number of connections, it is that they are not owned by the screen.** FE-R-27 was originally written as "one stream" because a stream opened by a mounting character screen cannot deliver an announcement for a character the user is not looking at. Opening all three at app mount removes that problem without a combined stream - see the note in section 9.
 
 **Case A - the announcement is for the character on screen**
 
@@ -237,3 +240,16 @@ One `apiClient` with two implementations selected by an env flag (Q2 A). Every f
 The mock's fake SSE stream must emit announcements for **all three characters**, not only the one on screen - otherwise the badge flow in section 6 case B is untestable, and that flow is the reason Q14 was asked.
 
 **What the mock cannot prove**: real SSE behaviour through dev-server proxies and buffering intermediaries. Carried as a risk, and the reason to attempt one real SSE connection before the hour-5.5 checkpoint rather than at it.
+
+### Correction: the transport is per-character, and FE-R-27 survived it
+
+Settled with BE on PR #8, after integration. Recorded because the original reasoning was wrong on a point of fact, not merely superseded.
+
+FE asked BE for a single combined stream and argued that per-character streams **could not** support the badge at all. BE serves per-character routes instead, one dedicated agent per character, which FR-5.4's 1:1:1 binding requires - so there was never a single agent that could have served a combined stream.
+
+The argument conflated two things. What breaks the badge is a connection whose lifetime is tied to a character *screen*, not the number of connections. `connectEvents` opens all three at app mount and hands back one disconnect function, so every character's events arrive whether or not it is on screen. FE-R-27's intent - the stream is never reachable from a character screen - holds unchanged, and no badge behaviour changed. Q14 did not need revisiting.
+
+Two things per-character connections cost, both accepted:
+
+- **Connection status is three states collapsed into one.** `onOpen` fires only when all three are up; any one dropping shows the banner. A single character's channel failing therefore looks like a total outage. Acceptable because the banner's job is to say "announcements may be missing", which is true in both cases.
+- **Reconnect is per connection**, so a partial recovery is possible and invisible. The banner clears only when all three are back.

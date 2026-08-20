@@ -67,9 +67,9 @@ merge conflict is a few lines. BE and INFRA should change what is wrong.
 | `packages/frontend/index.html` | 37 | |
 | `packages/frontend/README.md` | 103 | How to run, mock controls, notes for BE |
 | `src/main.tsx` | 15 | |
-| `src/App.tsx` | 276 | All state, all network calls, one SSE connection, plus `ConnectionBanner` |
+| `src/App.tsx` | 297 | All state, all network calls, the SSE connections opened once, plus `ConnectionBanner` |
 | `src/state.ts` | 446 | Reducer, actions, selectors |
-| `src/api.ts` | 176 | Client interface, HTTP implementation, flag selection |
+| `src/api.ts` | 372 | Client interface, HTTP implementation against BE's real contract, adapters for BE's wire shapes, per-character SSE, flag selection |
 | `src/mock.ts` | 391 | Canned backend with a scripted SSE stream |
 | `src/pure.ts` | 118 | Seven pure functions and the input caps |
 | `src/strings.ts` | 186 | `ko`/`en` dictionaries, attribute labels |
@@ -189,7 +189,7 @@ rather than discouraged.
 | FE-R-3, no prediction | `pending` is `Record<string, boolean>`. There is no shape that could carry a predicted value. The marker renders on the stats block, not per attribute |
 | FE-R-7, no control panel | `DeviceStatStrip` renders a `<section>` wrapping a `<dl>` and nothing interactive |
 | FE-R-24, `lang` everywhere | Attached in `api.ts`, read through a ref. No call site passes it, so no call site can forget |
-| FE-R-27, one SSE connection | Opened once in `App`'s mount effect, keyed on the client instance. Not reachable from a character screen |
+| FE-R-27, SSE not owned by a screen | Three connections, one per character, since BE's route is per-product. All opened in `App`'s single mount effect keyed on the client instance, and `connectEvents` returns one disconnect for all of them. No character screen can open or close a connection, which is the part of the rule that carries the badge |
 
 ## Ponytail review
 
@@ -297,21 +297,58 @@ claim that makes a summary worth less than no summary:
 
 ## Open items for BE
 
-Two structural asks, and one risk.
+One ask settled, one standing, two gaps BE raised itself, and one risk. Updated
+after BE's review on PR #8.
 
-1. **One SSE stream for all three characters**, each event carrying `characterId`.
-   A per-character stream cannot deliver an announcement for a character the user
-   is not viewing, and the roster badge depends on that.
+1. ~~**One SSE stream for all three characters**, each event carrying `characterId`.~~
+   **SETTLED on PR #8, and the ask was wrong.** BE serves per-character routes
+   (`GET /api/characters/:productId/events`), one dedicated agent behind each,
+   which FR-5.4's 1:1:1 binding requires - no single agent could have served a
+   combined stream. FE's stated reason, that a per-character stream "cannot
+   deliver an announcement for a character the user is not viewing", confused
+   the number of connections with their *ownership*: what breaks the badge is a
+   connection opened by a character screen. `connectEvents` opens all three at
+   app mount, so nothing about the badge changed. **No BE change needed.**
 2. **`deviceState` always a separate field from reply text.** FE's FR-5.5
    enforcement is that no function turns a string into stats, which only holds if
    the response separates them.
-3. **RISK - how discovery is made to fire on cue for the demo.** FR-5.10 triggers
+3. **`/invoke` returns no `deviceState`, even when the skill calls a device tool.**
+   Raised by BE on PR #8: `/invoke` uses a plain `agent.invoke()` rather than the
+   streamed tool-call parsing `/chat` does, so the state change happens and is
+   never reported. BE offered to fix it.
+
+   **Worth taking, and it is the one of these two that is visible on stage.** FE
+   cannot paper over it: FR-5.5 forbids reading stats out of the reply prose, so
+   the panel has nothing to update from and holds its previous values until the
+   next chat turn happens to mention the device. The demo beat is "invoke a
+   discovered skill, watch the device respond" - a stat panel that sits still
+   through it reads as the skill not working, which is the opposite of the point.
+
+   FE needs no change if the fix lands: `invokeSkill` already returns an
+   `ActionResponse` with a `deviceState` field, currently hardcoded `null` with a
+   comment saying why. It becomes `body.deviceState ? toDeviceStats(...) : null`,
+   the same one-line shape `sendMessage` already uses.
+
+4. **No roster or progression endpoint** (`FR-2` is not implemented on BE).
+   Raised by BE on PR #8, and it matches what `api.ts` already documents as gap 1.
+   `listCharacters` returns `CHARACTER_DEFAULTS` from `./characters.ts` and
+   `state.ts` applies a local cosmetic exp bump.
+
+   **Not asking BE to build it.** Progression is cosmetic in the drop order, and a
+   client-side simulation is honest as long as it is not presented as server
+   state. The thing to avoid is a demo claim that levels persist - they do not
+   survive a refresh. Recorded here rather than only in a source comment so it is
+   a known gap at the team level.
+
+5. **RISK - how discovery is made to fire on cue for the demo.** FR-5.10 triggers
    on accumulated data volume, so timing is outside the presenter's control. FE
    has no lever and no fallback if it stays silent. Against the mock the beat
    works; against real BE it is unverified. This needs settling early rather than
    at rehearsal.
 
 Everything else in `backend-mock-contract.md` is a proposal and expected to change.
+For BE's real shapes, `aidlc-docs/construction/be/code/api-examples.md` on PR #7 is
+a capture of BE running, which is a better source than FE's proposal document.
 
 ## Note for the hour-5.5 checkpoint
 
