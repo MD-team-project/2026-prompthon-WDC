@@ -33,7 +33,7 @@
  * are speech and text.
  */
 
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Character, ChatMessage, DeviceStats, Lang, Skill } from '@prompthon/shared';
 import { neighbourId, progressRatio } from '../pure';
 import type { MicStatus } from '../state';
@@ -85,6 +85,35 @@ export function CharacterView(props: Props) {
   const { character, t } = props;
   const swipeStartX = useRef<number | null>(null);
 
+  /*
+   * `.stage-slide` (character + caption) re-mounts on every switch so its
+   * entrance keyframe replays - a prop change alone can't restart a CSS
+   * animation on an element that's already mounted. `slide` carries the
+   * remount key plus which side the new character enters from; it starts
+   * `null` so the character screen's own first appearance never animates as
+   * if it had been swiped to.
+   *
+   * The direction has to be captured at the moment a switch is REQUESTED
+   * (swipe or dot), not derived after `character` changes - by the time this
+   * effect sees the new id, the swipe that caused it is long over.
+   */
+  const pendingDirectionRef = useRef<1 | -1>(1);
+  const prevCharacterIdRef = useRef(character.id);
+  const slideTokenRef = useRef(0);
+  const [slide, setSlide] = useState<{ token: number; direction: 1 | -1 } | null>(null);
+
+  useEffect(() => {
+    if (prevCharacterIdRef.current === character.id) return;
+    prevCharacterIdRef.current = character.id;
+    slideTokenRef.current += 1;
+    setSlide({ token: slideTokenRef.current, direction: pendingDirectionRef.current });
+  }, [character.id]);
+
+  const selectCharacter = (characterId: string, direction: 1 | -1) => {
+    pendingDirectionRef.current = direction;
+    props.onSelectCharacter(characterId);
+  };
+
   // The switcher dots and this swipe dispatch the same action, so a swipe has no
   // state of its own to keep in step. `neighbourId` owns the wrap-around.
   const endSwipe = (clientX: number) => {
@@ -95,12 +124,22 @@ export function CharacterView(props: Props) {
     const travelled = clientX - start;
     if (Math.abs(travelled) < SWIPE_MIN_PX) return;
 
+    const direction: 1 | -1 = travelled < 0 ? 1 : -1;
     const target = neighbourId(
       props.characters.map((c) => c.id),
       character.id,
-      travelled < 0 ? 1 : -1,
+      direction,
     );
-    if (target) props.onSelectCharacter(target);
+    if (target) selectCharacter(target, direction);
+  };
+
+  /** Dots have no drag direction of their own - forward if the tapped
+   * character sits later in the roster order, back otherwise. */
+  const directionTo = (targetId: string): 1 | -1 => {
+    const ids = props.characters.map((c) => c.id);
+    const from = ids.indexOf(character.id);
+    const to = ids.indexOf(targetId);
+    return to > from ? 1 : -1;
   };
 
   /** The last skill to arrive. `upsertSkill` appends, so this is the newest. */
@@ -195,23 +234,29 @@ export function CharacterView(props: Props) {
         }}
         data-testid="stage-wrap"
       >
-        <CharacterStage
-          artRef={character.artRef}
-          productId={character.productId}
-          levelUp={props.levelUp}
-          onLevelUpDone={props.onLevelUpDone}
-          discovery={props.discovery}
-          onDiscoveryDone={props.onDiscoveryDone}
-          t={t}
-        />
+        <div
+          key={slide?.token ?? 'initial'}
+          className="stage-slide"
+          data-direction={slide ? (slide.direction === -1 ? 'prev' : 'next') : undefined}
+        >
+          <CharacterStage
+            artRef={character.artRef}
+            productId={character.productId}
+            levelUp={props.levelUp}
+            onLevelUpDone={props.onLevelUpDone}
+            discovery={props.discovery}
+            onDiscoveryDone={props.onDiscoveryDone}
+            t={t}
+          />
 
-        <SpeechArea
-          messages={props.messages}
-          pending={props.pending}
-          logOpen={props.logOpen}
-          t={t}
-          onToggleLog={props.onToggleLog}
-        />
+          <SpeechArea
+            messages={props.messages}
+            pending={props.pending}
+            logOpen={props.logOpen}
+            t={t}
+            onToggleLog={props.onToggleLog}
+          />
+        </div>
       </div>
 
       {props.characters.length > 1 ? (
@@ -221,7 +266,7 @@ export function CharacterView(props: Props) {
             activeId={character.id}
             unseen={props.unseen}
             t={t}
-            onSelect={props.onSelectCharacter}
+            onSelect={(characterId) => selectCharacter(characterId, directionTo(characterId))}
           />
           <p className="stage-hint">{t('stage.hint')}</p>
         </div>

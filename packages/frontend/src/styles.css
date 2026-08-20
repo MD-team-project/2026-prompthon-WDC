@@ -10,6 +10,14 @@
  * screen and a paper-toned stage keeps its per-product tint readable under
  * projection, where a dark theme turns every tint into the same grey.
  *
+ * Everything AROUND the character reads as a game HUD rather than a form: a
+ * chunky ink outline (`--ink`) plus a hard offset shadow instead of a blur is
+ * what a mobile-game button/panel/badge looks like, and levels, rarity and
+ * counters get a gold treatment (`--gold`) rather than the per-product hue, so
+ * "this number just went up" reads the same way on every product. The stage
+ * itself - the character's own art, floor and floating motion - is
+ * deliberately untouched by any of this.
+ *
  * LAYOUT BUDGET - the point of the whole file.
  *
  *   `.stage-wrap` is the only region with `flex: 1`. Every other strip is
@@ -57,6 +65,27 @@
   --product-ink: #4e5b85;
   --tint: #e8eaf2;
 
+  /*
+   * Game-HUD layer.
+   *
+   * `--ink` is the outline/bevel colour for every chunky panel, button and
+   * badge - a warm near-black rather than a true black, so it sits comfortably
+   * next to the paper surfaces instead of looking like a debug border.
+   * `--ink-soft` is the same ink at low opacity, for outlines that need to
+   * read as a frame without competing with `--ink` itself where the two
+   * appear together (e.g. a soft-ink border under a solid-ink bevel shadow).
+   *
+   * `--gold` is reserved for "this is a game stat": level chips, the level-up
+   * banner and rare-tier marks. It never appears as a per-product colour, so
+   * it stays legible as "level/rarity" regardless of which product's hue is
+   * active.
+   */
+  --ink: #2a2016;
+  --ink-soft: rgba(42, 32, 22, 0.18);
+  --gold: #f2b134;
+  --gold-deep: #c8811a;
+  --gold-ink: #4a2f05;
+
   --font-body: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
     'Apple SD Gothic Neo', 'Segoe UI', Roboto, sans-serif;
   --font-latin: 'Instrument Sans', var(--font-body);
@@ -91,8 +120,15 @@ body {
   margin: 0;
 }
 
+/* Only visible in the desktop letterbox around `.app` (mobile is full-bleed,
+   see the media query below) - a soft arcade backdrop instead of flat white,
+   so the device frame reads as sitting on a game menu rather than a page. */
 body {
-  background: var(--bg-deep);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(circle at 12% 100%, color-mix(in srgb, var(--gold) 14%, transparent), transparent 55%),
+    linear-gradient(165deg, #fdf7ec 0%, #f1e8d6 55%, #e7dcc3 100%);
+  background-color: var(--bg-deep);
   color: var(--text);
   font-family: var(--font-body);
   letter-spacing: -0.012em;
@@ -175,10 +211,13 @@ svg {
 
   .app {
     height: min(100%, 880px);
-    border-radius: 40px;
+    border-radius: 36px;
+    /* A console bezel rather than a page card: a solid ink ring, then the
+       same soft ambient shadow as before. */
+    border: 5px solid var(--ink);
     box-shadow:
-      0 0 0 1px rgba(255, 255, 255, 0.7),
-      0 30px 60px -22px rgba(25, 24, 22, 0.35);
+      0 0 0 1px rgba(255, 255, 255, 0.7) inset,
+      0 30px 60px -22px rgba(25, 24, 22, 0.4);
   }
 }
 
@@ -216,15 +255,22 @@ svg {
 
 .pill {
   background: var(--surface-2);
+  border: 1.5px solid var(--ink-soft);
   border-radius: 999px;
   padding: 1px 7px;
   font-size: 11px;
+  font-weight: 700;
   color: var(--text-dim);
 }
 
+/* A counter gem, not a plain dot: gold fill + ink outline + a hard bevel
+   shadow reads as "score" the way a flat filled circle doesn't. */
 .badge {
-  background: var(--product-ink);
-  color: #fff;
+  position: relative;
+  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%);
+  color: var(--gold-ink);
+  border: 1.5px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink);
   border-radius: 999px;
   min-width: 20px;
   height: 20px;
@@ -232,7 +278,8 @@ svg {
   display: grid;
   place-items: center;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
+  animation: badge-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .badge-corner {
@@ -241,24 +288,47 @@ svg {
   right: -7px;
 }
 
+/* An EXP/HP-bar track: an ink-rimmed sunken channel rather than a flat line,
+   so the fill reads as a resource being spent/gained rather than a progress
+   indicator borrowed from a form. */
 .bar {
   display: block;
-  height: 5px;
+  height: 6px;
   border-radius: 999px;
-  background: var(--line);
+  background: var(--surface-2);
+  border: 1.5px solid var(--ink-soft);
+  box-shadow: inset 0 1px 2px rgba(25, 24, 22, 0.16);
   overflow: hidden;
 }
 
 .bar-sm {
-  height: 4px;
+  height: 5px;
 }
 
 .bar-fill {
+  position: relative;
   display: block;
   height: 100%;
-  background: var(--product);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--product) 65%, #fff) 0%,
+    var(--product) 55%,
+    var(--product-ink) 100%
+  );
   border-radius: 999px;
   transition: width 400ms ease;
+}
+
+/* Glossy top sheen - the standard game-bar highlight that separates a "fuel
+   gauge" from a plain filled rectangle. */
+.bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 1px 1px auto 1px;
+  height: 45%;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
+  pointer-events: none;
 }
 
 /* --- roster: a character-select screen --- */
@@ -283,8 +353,9 @@ svg {
 .roster-title {
   margin: 0;
   font-size: 23px;
-  font-weight: 600;
+  font-weight: 800;
   letter-spacing: -0.03em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .roster-subtitle {
@@ -303,12 +374,19 @@ svg {
 .lang-toggle {
   flex: none;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 2px solid var(--ink);
   border-radius: 999px;
   padding: 7px 14px;
   font-family: var(--font-latin);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--ink);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+
+.lang-toggle:active {
+  transform: translateY(2px);
+  box-shadow: none;
 }
 
 .roster-list {
@@ -320,10 +398,17 @@ svg {
   gap: 12px;
 }
 
+/*
+ * A character-select card: ink outline plus a hard offset shadow underneath
+ * it, rather than a soft blur. Pressing it doesn't scale the card, it pushes
+ * the card DOWN onto its own shadow (the shadow's offset shrinks to match) -
+ * the standard "sticker button" press used across mobile game menus.
+ */
 .tile {
   position: relative;
   width: 100%;
   background: var(--surface);
+  border: 2.5px solid var(--ink);
   border-radius: var(--radius-lg);
   padding: 16px;
   display: flex;
@@ -331,14 +416,13 @@ svg {
   gap: 16px;
   text-align: left;
   overflow: hidden;
-  box-shadow:
-    0 1px 2px rgba(25, 24, 22, 0.04),
-    0 14px 26px -20px rgba(25, 24, 22, 0.45);
-  transition: transform 160ms ease;
+  box-shadow: 0 5px 0 var(--ink);
+  transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
 .tile:active {
-  transform: scale(0.988);
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--ink);
 }
 
 .tile-aura {
@@ -370,7 +454,8 @@ svg {
     color-mix(in srgb, var(--product) 82%, #fff),
     var(--product-ink)
   );
-  box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--product) 70%, transparent);
+  border: 2px solid var(--ink);
+  box-shadow: 0 3px 0 -1px color-mix(in srgb, var(--product) 70%, var(--ink));
 }
 
 /* FE-R-10: the same level-as-a-layer idea as the stage, at tile scale. */
@@ -378,7 +463,7 @@ svg {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--product) 42%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--gold) 55%, transparent);
 }
 
 .tile-art[data-level='2'] .tile-art-ring,
@@ -416,8 +501,12 @@ svg {
 }
 
 .tile-level {
-  color: var(--product-ink);
-  font-weight: 600;
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-weight: 800;
 }
 
 .tile-exp {
@@ -462,6 +551,7 @@ svg {
   min-width: 34px;
   height: 34px;
   padding: 0 10px;
+  border: 2px solid var(--ink);
   border-radius: 11px;
   background: var(--surface);
   color: var(--text-dim);
@@ -470,7 +560,14 @@ svg {
   justify-content: center;
   gap: 7px;
   font-size: 12.5px;
-  box-shadow: 0 1px 2px rgba(25, 24, 22, 0.04);
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--ink);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+
+.hud-button:active {
+  transform: translateY(2px);
+  box-shadow: none;
 }
 
 .hud-button svg {
@@ -502,17 +599,24 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
+  padding: 3px 10px 3px 3px;
   border-radius: 999px;
+  border: 2px solid var(--ink);
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(25, 24, 22, 0.04);
+  box-shadow: 0 2px 0 var(--ink-soft);
 }
 
+/* The level number as a gold "Lv" chip rather than plain coloured text - a
+   game HUD reads level as a badge, not a label. */
 .hud-level {
   font-size: 11px;
-  font-weight: 600;
-  color: var(--product-ink);
+  font-weight: 800;
+  color: var(--gold-ink);
   letter-spacing: 0.02em;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 
 /* `.bar`/`.bar-sm`/`.bar-fill` are block-level with no intrinsic width, sized
@@ -534,6 +638,35 @@ svg {
   flex-direction: column;
   /* Horizontal swipe switches character; vertical gestures stay with the page. */
   touch-action: pan-y;
+}
+
+/*
+ * The character + caption as one travelling unit, re-mounted (by `key`, in
+ * `CharacterView`) on every character switch so the entrance keyframe below
+ * actually replays - a prop change alone wouldn't restart a CSS animation.
+ *
+ * Only entrance is animated: the outgoing character is simply gone the
+ * instant React swaps it (there is exactly one character mounted at a time),
+ * so this reads as the new one sliding in from the side it was swiped from
+ * or the dot it was picked from, rather than a two-panel crossfade.
+ *
+ * Same flex role `.stage-wrap` gave its children directly before this
+ * wrapper existed - `.stage` still needs to be the region that grows.
+ */
+.stage-slide {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.stage-slide[data-direction='next'] {
+  animation: stage-slide-in-next 340ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.stage-slide[data-direction='prev'] {
+  animation: stage-slide-in-prev 340ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
 
 /*
@@ -608,11 +741,20 @@ svg {
   animation: bob 4.5s ease-in-out infinite;
 }
 
-/* The massage chair's frames are 584x640 - a real aspect ratio, not the
-   placeholder blob's. Everything else about the figure (size, float) stays
-   shared. */
+/* Each product with real art keeps that art's own aspect ratio rather than
+   the placeholder blob's - trimmed to its own bounding box, so these are the
+   actual proportions of the art, not the source canvas. Everything else
+   about the figure (size, float) stays shared. */
 [data-product='massagechair'] .stage-figure {
   aspect-ratio: 584 / 640;
+}
+
+[data-product='shoecase'] .stage-figure {
+  aspect-ratio: 900 / 806;
+}
+
+[data-product='pral'] .stage-figure {
+  aspect-ratio: 753 / 900;
 }
 
 /*
@@ -760,7 +902,11 @@ svg {
   width: clamp(150px, 30vh, 260px);
   height: clamp(150px, 30vh, 260px);
   border-radius: 50%;
-  border: 2px solid var(--product);
+  border: 3px solid var(--product);
+  /* A gold glow riding the product-coloured ring - the same "this is a game
+     event" gold used on the level chip and badge, layered on the per-product
+     ring rather than replacing it. */
+  box-shadow: 0 0 26px 4px color-mix(in srgb, var(--gold) 55%, transparent);
   opacity: 0;
   transform: translate(-50%, -50%);
   pointer-events: none;
@@ -787,13 +933,14 @@ svg {
   left: 50%;
   font-family: var(--font-latin);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.18em;
-  color: var(--product-ink);
-  background: var(--surface);
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border: 2px solid var(--ink);
   border-radius: 999px;
   padding: 6px 13px;
-  box-shadow: 0 8px 20px -14px rgba(25, 24, 22, 0.5);
+  box-shadow: 0 3px 0 var(--ink);
   /*
    * 1.4s: long enough to read as its own beat - rise in with a small
    * overshoot, hold, then float on up and fade - rather than the 0.5s fade
@@ -932,22 +1079,28 @@ svg {
   place-items: center;
 }
 
+/* A small gem rather than a dot - rotated square, so the active one reading
+   as a "selected slot" marker matches the rest of the game-HUD vocabulary. */
 .switcher-dot::before {
   content: '';
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  border: 1px solid var(--ink-soft);
   background: var(--text-mute);
-  opacity: 0.4;
+  opacity: 0.5;
   transition:
     transform 200ms ease,
-    opacity 200ms ease;
+    opacity 200ms ease,
+    background 200ms ease;
 }
 
 .switcher-dot[data-active='true']::before {
   background: var(--product);
+  border-color: var(--ink);
   opacity: 1;
-  transform: scale(1.45);
+  transform: rotate(45deg) scale(1.5);
 }
 
 /* FE-R-28: an unseen announcement raises a mark here as well as on the roster
@@ -979,9 +1132,10 @@ svg {
   gap: 8px;
   margin: 0 18px 12px;
   padding: 10px 12px;
-  border: 1px solid var(--line);
+  border: 2px solid var(--ink);
   border-radius: 14px;
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow: 0 2px 0 var(--ink-soft);
 }
 
 .stat-panel-header {
@@ -1021,14 +1175,15 @@ svg {
 
 .stat-chip {
   flex: none;
-  background: var(--surface);
+  background: #fff;
+  border: 1.5px solid var(--line-2);
   border-radius: 10px;
   padding: 7px 11px;
   display: flex;
   align-items: baseline;
   gap: 7px;
   font-size: 11.5px;
-  box-shadow: 0 1px 2px rgba(25, 24, 22, 0.035);
+  box-shadow: 0 2px 0 var(--line);
 }
 
 .stat-chip dt {
@@ -1102,10 +1257,9 @@ svg {
   padding: 14px 15px;
   text-align: left;
   background: var(--surface);
+  border: 2.5px solid var(--ink);
   border-radius: var(--radius);
-  box-shadow:
-    0 1px 2px rgba(25, 24, 22, 0.04),
-    0 12px 24px -18px rgba(25, 24, 22, 0.45);
+  box-shadow: 0 4px 0 var(--ink);
   animation: unlock-pop 0.55s cubic-bezier(0.22, 1.4, 0.36, 1) both;
 }
 
@@ -1131,13 +1285,18 @@ svg {
   pointer-events: none;
 }
 
+/* Gold rather than the per-product hue - this is the "you got something"
+   mark, and gold is what reads as a pickup regardless of which product's
+   character found it. */
 .spotlight-mark {
   position: relative;
   flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--product);
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  border: 1.5px solid var(--ink);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
 }
 
 /* Two staggered rings expanding off the mark - the same "something just
@@ -1148,7 +1307,7 @@ svg {
   position: absolute;
   inset: -6px;
   border-radius: 50%;
-  border: 1.5px solid var(--product);
+  border: 1.5px solid var(--gold-deep);
   opacity: 0;
   animation: unlock-ring 0.9s ease-out both;
 }
@@ -1157,9 +1316,11 @@ svg {
   animation-delay: 0.14s;
 }
 
-/* FE-R-12: tier legible without reading the label. */
+/* FE-R-12: tier legible without reading the label. The advanced tier keeps
+   its per-product ring, so gold ("a pickup") and the product hue ("this
+   product's advanced tier") stay visually distinct signals. */
 .spotlight[data-tier='advanced'] .spotlight-mark {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--product) 18%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--product) 22%, transparent);
 }
 
 .spotlight[data-tier='advanced'] .spotlight-mark::before,
@@ -1220,9 +1381,11 @@ svg {
   justify-content: space-between;
   gap: 8px;
   background: var(--tint);
+  border: 1.5px solid color-mix(in srgb, var(--product) 35%, transparent);
   border-radius: 11px;
   padding: 8px 12px;
   font-size: 11.5px;
+  font-weight: 600;
   color: var(--product-ink);
 }
 
@@ -1244,7 +1407,8 @@ svg {
   height: 54px;
   border-radius: 16px;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 2px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1322,8 +1486,8 @@ svg {
 
 .input-field input {
   width: 100%;
-  background: transparent;
-  border: 1px solid var(--line);
+  background: #fff;
+  border: 2px solid var(--ink-soft);
   border-radius: 999px;
   padding: 10px 15px;
   color: var(--text);
@@ -1346,11 +1510,18 @@ svg {
   width: 40px;
   height: 40px;
   border-radius: 50%;
+  border: 2px solid var(--ink);
   background: var(--text);
   color: var(--bg);
   display: grid;
   place-items: center;
-  transition: opacity 160ms ease;
+  box-shadow: 0 3px 0 var(--ink);
+  transition: opacity 160ms ease, transform 100ms ease, box-shadow 100ms ease;
+}
+
+.send-button:active {
+  transform: translateY(2px);
+  box-shadow: none;
 }
 
 .send-button svg {
@@ -1362,6 +1533,8 @@ svg {
 .send-button:disabled {
   background: var(--line);
   color: var(--text-mute);
+  border-color: var(--line-2);
+  box-shadow: none;
 }
 
 .input-cap {
@@ -1398,6 +1571,8 @@ svg {
   display: flex;
   flex-direction: column;
   background: var(--bg);
+  border: 3px solid var(--ink);
+  border-bottom: none;
   border-radius: 24px 24px 0 0;
   box-shadow: 0 -20px 44px -26px rgba(25, 24, 22, 0.55);
   animation: sheet-rise 260ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
@@ -1426,8 +1601,9 @@ svg {
   left: 50%;
   transform: translateX(-50%);
   width: 34px;
-  height: 4px;
+  height: 5px;
   border-radius: 999px;
+  border: 1px solid var(--ink-soft);
   background: var(--line);
 }
 
@@ -1455,6 +1631,7 @@ svg {
 
 .bubble {
   background: var(--surface);
+  border: 1.5px solid var(--ink-soft);
   border-radius: 16px;
   padding: 11px 14px;
   font-size: 13.5px;
@@ -1462,13 +1639,14 @@ svg {
   max-width: 86%;
   align-self: flex-start;
   white-space: pre-wrap;
-  box-shadow: 0 1px 2px rgba(25, 24, 22, 0.035);
+  box-shadow: 0 2px 0 var(--line);
 }
 
 .bubble[data-role='user'] {
   align-self: flex-end;
   background: var(--surface-2);
   color: var(--text-dim);
+  border-color: var(--line);
   box-shadow: none;
 }
 
@@ -1518,8 +1696,9 @@ svg {
 .skill-card {
   position: relative;
   background: var(--surface);
-  border: 1px solid var(--line-2);
+  border: 2px solid var(--ink-soft);
   border-radius: var(--radius);
+  box-shadow: 0 2px 0 var(--line);
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -1538,13 +1717,15 @@ svg {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 3px;
+  width: 4px;
   background: var(--line);
 }
 
 .skill-card[data-tier='advanced'] {
-  border-color: color-mix(in srgb, var(--product) 34%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--product) 8%, transparent);
+  border-color: color-mix(in srgb, var(--product) 40%, var(--ink) 15%);
+  box-shadow:
+    0 2px 0 var(--line),
+    0 0 0 3px color-mix(in srgb, var(--product) 10%, transparent);
 }
 
 .skill-card[data-tier='advanced']::before {
@@ -1561,7 +1742,7 @@ svg {
   background: linear-gradient(
     115deg,
     transparent 35%,
-    color-mix(in srgb, var(--product) 30%, transparent) 50%,
+    color-mix(in srgb, var(--gold) 40%, transparent) 50%,
     transparent 65%
   );
   transform: translateX(-140%);
@@ -1578,21 +1759,22 @@ svg {
 }
 
 /* Part of FE-R-12's frame, not the text label it replaced: a faceted gem,
-   hollow for a basic skill and filled for an advanced one. */
+   hollow silver for a basic skill and a filled gold gem for an advanced one -
+   the universal "common vs. rare loot" read. */
 .skill-tier-mark {
   flex: none;
   width: 8px;
   height: 8px;
   border-radius: 2px;
   transform: rotate(45deg);
-  border: 1.5px solid var(--line);
+  border: 1.5px solid var(--ink-soft);
   background: transparent;
 }
 
 .skill-card[data-tier='advanced'] .skill-tier-mark {
-  border-color: var(--product);
-  background: var(--product);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--product) 16%, transparent);
+  border-color: var(--ink);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 24%, transparent);
 }
 
 .skill-name {
@@ -1638,30 +1820,37 @@ svg {
 .primary-button,
 .secondary-button {
   flex: 1;
+  border: 2px solid var(--ink);
   border-radius: 11px;
   padding: 11px;
   font-size: 12.5px;
-  font-weight: 600;
-  transition: transform 0.12s ease;
+  font-weight: 700;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .primary-button {
   background: var(--text);
   color: var(--bg);
+  box-shadow: 0 3px 0 var(--ink);
 }
 
 .secondary-button {
-  background: transparent;
-  border: 1px solid var(--line);
+  background: var(--surface);
   color: var(--text-dim);
+  box-shadow: 0 3px 0 var(--ink-soft);
 }
 
-/* A tactile press rather than a hover-only state - these are tapped on a
-   phone far more often than clicked, and the level-up/discovery reactions are
-   already the app's silent stand-in for a "thunk" (FE-R-22: no audio). */
+/*
+ * A "sticker button" press rather than a hover-only state - these are tapped
+ * on a phone far more often than clicked, and the level-up/discovery
+ * reactions are already the app's silent stand-in for a "thunk" (FE-R-22: no
+ * audio). Pushing the button down onto its own bevel shadow reads as a
+ * physical press in a way a scale-down alone doesn't.
+ */
 .primary-button:active,
 .secondary-button:active {
-  transform: scale(0.96);
+  transform: translateY(3px);
+  box-shadow: none;
 }
 
 /* --- motion --- */
@@ -1727,6 +1916,31 @@ svg {
   from {
     opacity: 0;
     transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* `.stage-slide`'s entrance: enters from the right when the switch moved
+   forward (next dot, or a leftward swipe), and mirrors from the left for
+   backward - see the direction note on `.stage-slide` itself. */
+@keyframes stage-slide-in-next {
+  from {
+    opacity: 0;
+    transform: translateX(46px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes stage-slide-in-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-46px);
   }
   to {
     opacity: 1;
@@ -1892,6 +2106,23 @@ svg {
   }
   50% {
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--product) 14%, transparent);
+  }
+}
+
+/* The counter-gem badge's own arrival beat - a bigger overshoot than
+   `unlock-pop` because this one has no separate ring/shine to carry the
+   "something changed" read on its own. */
+@keyframes badge-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 

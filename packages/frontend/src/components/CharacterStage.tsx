@@ -25,17 +25,20 @@
  *
  * FE-R-7: nothing here is a control. No slider, no toggle, no stepper.
  *
- * The massage chair is the one product with real art so far: two frame
- * sequences dropped in under `public/characters/massagechair`. Frame 0 of
- * `surprise/` is the idle pose (no effect). `surprise/` plays once while
+ * The massage chair is the one product with an animated reaction so far: two
+ * frame sequences dropped in under `public/characters/massagechair`. Frame 0
+ * of `surprise/` is the idle pose (no effect). `surprise/` plays once while
  * `discovery` is true (a new skill arrived); `levelup/` plays once while
  * `levelUp` is true, and takes priority if both happen to be true at once -
  * levelling up is the rarer event. Either one hands back to idle when its
- * frames run out, driven by frame count rather than a fixed duration. `pral`
- * and `shoecase` still have no art, so they keep the abstract placeholder
- * (Q8 C) and the CSS pop/burst effect, timed by `LEVEL_UP_MS` instead - and
+ * frames run out, driven by frame count rather than a fixed duration.
+ *
+ * `pral` and `shoecase` have real art too (`STATIC_ART_SRC` below) but only
+ * one frame each, no reaction sequence - so they keep the CSS pop/burst
+ * effect on top of that single image, timed by `LEVEL_UP_MS` instead, and
  * `discovery` for them clears on `DISCOVERY_MS` rather than on frame count,
- * for the same reason.
+ * for the same reason. Any product with neither falls back to the abstract
+ * placeholder (Q8 C).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -70,6 +73,12 @@ function levelUpFrameSrc(index: number): string {
   return `/characters/massagechair/levelup/frame-${index}.webp`;
 }
 
+/** The single idle image for products with real art but no reaction sequence. */
+const STATIC_ART_SRC: Partial<Record<ProductId, string>> = {
+  pral: '/characters/pral/idle.webp',
+  shoecase: '/characters/shoecase/idle.webp',
+};
+
 interface Props {
   artRef: string;
   productId: ProductId;
@@ -91,6 +100,7 @@ export function CharacterStage({
   t,
 }: Props) {
   const isMassageChair = productId === 'massagechair';
+  const staticArtSrc = STATIC_ART_SRC[productId];
 
   // Read the callbacks through refs, not as effect dependencies. Both are
   // fresh closures every render (App re-renders on any dispatch, including
@@ -195,6 +205,8 @@ export function CharacterStage({
         <div className="stage-figure" aria-hidden="true">
           {isMassageChair ? (
             <img className="stage-sprite" src={spriteSrc} alt="" />
+          ) : staticArtSrc ? (
+            <img className="stage-sprite" src={staticArtSrc} alt="" />
           ) : (
             <div className="stage-art" />
           )}
