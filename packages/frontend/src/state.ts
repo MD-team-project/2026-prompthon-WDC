@@ -47,6 +47,8 @@ export interface State {
   unseen: Record<string, number>;
   /** In-flight marker. Boolean by decision - never a predicted value. FE-R-3. */
   pending: Record<string, boolean>;
+  /** True from the first streamed token of a reply until it finalizes on `done`. */
+  streaming: Record<string, boolean>;
   /** Skill the next message refers to, when feedback started from a card. */
   feedbackSkillId: string | null;
   draft: string;
@@ -105,6 +107,7 @@ export type Action =
   | { type: 'mic/status'; status: MicStatus }
   | { type: 'transcript/ready'; text: string }
   | { type: 'message/sent'; characterId: string; text: string; at: string }
+  | { type: 'message/streamToken'; characterId: string; messageId: string; delta: string; at: string }
   | { type: 'action/started'; characterId: string }
   | { type: 'action/response'; characterId: string; response: ActionResponse }
   | { type: 'action/failed'; characterId: string; text: string; at: string }
@@ -125,6 +128,7 @@ export function initialState(lang: Lang): State {
     sse: 'connecting',
     unseen: {},
     pending: {},
+    streaming: {},
     feedbackSkillId: null,
     draft: '',
     micStatus: 'idle',
@@ -188,6 +192,25 @@ function appendMessage(
   message: ChatMessage,
 ): Record<string, ChatMessage[]> {
   return { ...messages, [characterId]: [...(messages[characterId] ?? []), message] };
+}
+
+/**
+ * A terminal reply (`done`, or a transport failure) either finalizes the
+ * streamed placeholder `message/streamToken` built up token by token, or - if
+ * nothing streamed (mock latency with no chunks, or a failure before the
+ * first token) - appends fresh, same as before streaming existed.
+ */
+function finalizeStreamedMessage(
+  messages: Record<string, ChatMessage[]>,
+  characterId: string,
+  wasStreaming: boolean,
+  message: ChatMessage,
+): Record<string, ChatMessage[]> {
+  const existing = messages[characterId] ?? [];
+  if (wasStreaming && existing.length > 0) {
+    return { ...messages, [characterId]: [...existing.slice(0, -1), message] };
+  }
+  return appendMessage(messages, characterId, message);
 }
 
 export function reducer(state: State, action: Action): State {
@@ -289,8 +312,24 @@ export function reducer(state: State, action: Action): State {
     case 'action/started':
       return { ...state, pending: { ...state.pending, [action.characterId]: true } };
 
+    case 'message/streamToken': {
+      const { characterId, messageId, delta, at } = action;
+      const list = state.messages[characterId] ?? [];
+      const index = list.findIndex((m) => m.id === messageId);
+      const nextList =
+        index === -1
+          ? [...list, { id: messageId, characterId, role: 'character' as const, text: delta, kind: 'normal' as const, at }]
+          : list.map((m, i) => (i === index ? { ...m, text: m.text + delta } : m));
+      return {
+        ...state,
+        messages: { ...state.messages, [characterId]: nextList },
+        streaming: { ...state.streaming, [characterId]: true },
+      };
+    }
+
     case 'action/response': {
       const { characterId, response } = action;
+      const wasStreaming = Boolean(state.streaming[characterId]);
 
       // ------------------------------------------------------------------
       // FE-R-1 / FR-5.5. The single most important transition in this unit.
@@ -303,7 +342,7 @@ export function reducer(state: State, action: Action): State {
       // mention 30 - and the screen shows 25, because 25 is the only number
       // that reached `deviceStats`.
       // ------------------------------------------------------------------
-      const messages = appendMessage(state.messages, characterId, response.message);
+      const messages = finalizeStreamedMessage(state.messages, characterId, wasStreaming, response.message);
       const deviceStats = response.deviceState
         ? { ...state.deviceStats, [characterId]: response.deviceState }
         : state.deviceStats;
@@ -337,6 +376,7 @@ export function reducer(state: State, action: Action): State {
         skills,
         // FE-R-4
         pending: { ...state.pending, [characterId]: false },
+        streaming: { ...state.streaming, [characterId]: false },
         feedbackSkillId: null,
       };
     }
@@ -352,12 +392,14 @@ export function reducer(state: State, action: Action): State {
         kind: 'failure',
         at: action.at,
       };
+      const wasStreaming = Boolean(state.streaming[action.characterId]);
       return {
         ...state,
         seq: state.seq + 1,
-        messages: appendMessage(state.messages, action.characterId, message),
+        messages: finalizeStreamedMessage(state.messages, action.characterId, wasStreaming, message),
         // FE-R-4
         pending: { ...state.pending, [action.characterId]: false },
+        streaming: { ...state.streaming, [action.characterId]: false },
       };
     }
 

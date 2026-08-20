@@ -160,8 +160,16 @@ export function App() {
     const skillId = state.feedbackSkillId;
 
     dispatch({ type: 'message/sent', characterId, text, at: now() });
+
+    // Client-generated so the very first token (still in `onToken`'s closure
+    // below) already knows which message to create/append to - the reducer
+    // never invents this id itself (state.ts's own "id generation pure" rule
+    // is about the reducer's own local seq counter, not this one).
+    const streamMessageId = `stream_${crypto.randomUUID()}`;
     api
-      .sendMessage(characterId, text, skillId)
+      .sendMessage(characterId, text, skillId, (delta) =>
+        dispatch({ type: 'message/streamToken', characterId, messageId: streamMessageId, delta, at: now() }),
+      )
       .then((response) => {
         dispatch({ type: 'action/response', characterId, response });
 
@@ -277,6 +285,7 @@ export function App() {
           skills={activeSkills(state, character.id)}
           unseen={state.unseen}
           pending={Boolean(state.pending[character.id])}
+          streaming={Boolean(state.streaming[character.id])}
           levelUp={Boolean(state.levelUp[character.id])}
           discovery={Boolean(state.discovery[character.id])}
           compendiumOpen={state.compendiumOpen}

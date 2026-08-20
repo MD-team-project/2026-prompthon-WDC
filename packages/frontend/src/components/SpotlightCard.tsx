@@ -30,10 +30,10 @@
  * locked entry, no count of what is coming - dropping the idle state removed
  * the one place that was closest to violating that.
  *
- * FE-R-13: the reason is not here. It renders in full, expanded, on the card
- * in the compendium - which is where this leads with one tap. Showing a
- * clipped reason here would be the "behind a tap" failure in a different
- * costume.
+ * FE-R-13: the reason is not here. It renders on the card in the compendium
+ * - which is where this leads with one tap, collapsed like every other card
+ * there (a later directive dropped the "opens pre-expanded" exception this
+ * used to rely on) - a second tap on that card is what reveals the reason.
  *
  * Tier no longer has a text label here - just the accent dot's glow, kept
  * subtle rather than spelled out.

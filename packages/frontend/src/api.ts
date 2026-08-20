@@ -65,7 +65,13 @@ export interface ApiClient {
    */
   getTodayContext(): Promise<DailyContextStats>;
   listSkills(characterId: string): Promise<Skill[]>;
-  sendMessage(characterId: string, text: string, skillId: string | null): Promise<ActionResponse>;
+  /** `onToken` fires with each chunk of the reply as BE streams it, before the returned promise settles. */
+  sendMessage(
+    characterId: string,
+    text: string,
+    skillId: string | null,
+    onToken?: (text: string) => void,
+  ): Promise<ActionResponse>;
   invokeSkill(characterId: string, skillId: string): Promise<ActionResponse>;
   transcribe(audio: Blob): Promise<string>;
   /** Returns a disconnect function. */
@@ -123,15 +129,23 @@ interface BeDailyContext {
   observedAt: string;
 }
 
+interface BeBilingual {
+  ko: string;
+  en: string;
+}
+
+/**
+ * FE-facing shape only - `content` (the full analysis) never leaves BE over
+ * REST (construction/be, PR #7 follow-up). `title`/`summary` are the only
+ * fields the compendium shows, one language picked at read time.
+ */
 interface BeSkillSummary {
   id: string;
   productId: ProductId;
-  title: string;
+  title: BeBilingual;
+  kind: 'buff' | 'action';
+  summary: BeBilingual;
   createdAt: string;
-}
-
-interface BeSkillRecord extends BeSkillSummary {
-  content: string;
 }
 
 interface BeFailure {
@@ -185,13 +199,14 @@ function toDailyContext(body: BeDailyContext): DailyContextStats {
  * skill it returns is presented uniformly rather than guessed at. Revisit once
  * BE distinguishes them.
  */
-function toSkill(record: BeSkillRecord): Skill {
+function toSkill(record: BeSkillSummary, lang: Lang): Skill {
   return {
     id: record.id,
     characterId: record.productId,
-    name: record.title,
+    name: record.title[lang],
     tier: 'basic',
-    reason: record.content,
+    kind: record.kind,
+    reason: record.summary[lang],
     status: 'active',
     discoveredAt: record.createdAt,
     revisedAt: null,
@@ -211,13 +226,16 @@ function characterMessage(characterId: string, text: string, kind: ChatMessage['
 
 /**
  * Reads an SSE response body until its `done` event, and returns that event's
- * reply. `/chat`'s intermediate `token`/`deviceState` events are BE's live
- * progress for a UI that streams the reply as it is generated - this client
- * does not stream yet, so it drains them and uses the `done` event's `reply`,
- * which already carries the accumulated prose and the last deviceState BE saw
- * (see `packages/backend/src/routes/chat.ts`).
+ * reply. Each intermediate `token` event is BE's live progress as the reply is
+ * generated - forwarded to `onToken` as it arrives so the UI can render it
+ * word by word instead of waiting for `done`. The `done` event's `reply` is
+ * still the source of truth returned here (accumulated prose and the last
+ * deviceState BE saw - see `packages/backend/src/routes/character.ts`).
  */
-async function readChatUntilDone(body: ReadableStream<Uint8Array>): Promise<BeAgentReply> {
+async function readChatUntilDone(
+  body: ReadableStream<Uint8Array>,
+  onToken?: (text: string) => void,
+): Promise<BeAgentReply> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -235,6 +253,7 @@ async function readChatUntilDone(body: ReadableStream<Uint8Array>): Promise<BeAg
       for (const line of frame.split('\n')) {
         if (!line.startsWith('data: ')) continue;
         const event = JSON.parse(line.slice('data: '.length)) as BeControlEvent;
+        if (event.type === 'token') onToken?.(event.text);
         if (event.type === 'done') return event.reply;
       }
 
@@ -274,27 +293,23 @@ function createHttpClient(getLang: GetLang): ApiClient {
 
     async listSkills(characterId) {
       const summaries = await unwrap<BeSkillSummary[]>(await fetch(`/api/characters/${characterId}/skills`));
-      // The list route omits `content` to keep polling cheap (BE's own comment on the
-      // route) - the compendium needs the full reason, so each summary is filled in.
-      const records = await Promise.all(
-        summaries.map(async (summary) =>
-          unwrap<BeSkillRecord>(await fetch(`/api/characters/${characterId}/skills/${summary.id}`)),
-        ),
-      );
-      return records.map(toSkill);
+      // The list already carries title/summary in both languages - no per-skill
+      // detail fetch needed now that `/skills/:id` returns the same shape (BE
+      // never sends the full analysis over REST).
+      return summaries.map((s) => toSkill(s, getLang()));
     },
 
-    async sendMessage(characterId, text, skillId) {
+    async sendMessage(characterId, text, skillId, onToken) {
       const response = await fetch(`/api/characters/${characterId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: withSkillContext(text, skillId) }),
+        body: JSON.stringify({ message: withSkillContext(text, skillId), lang: getLang() }),
       });
       if (!response.ok || !response.body) {
         throw new Error(`Request failed (${response.status})`);
       }
 
-      const reply = await readChatUntilDone(response.body);
+      const reply = await readChatUntilDone(response.body, onToken);
       // A model-call failure still arrives as a `done` event with its own in-character
       // apology and no deviceState (NFR-2.2, by BE's own design) - that is rendered as
       // the character speaking, styled as a failure, rather than discarded in favour of
@@ -344,19 +359,10 @@ function createHttpClient(getLang: GetLang): ApiClient {
       const announceText = (name: string): string =>
         getLang() === 'ko' ? `${name} 스킬을 새로 발견했어요!` : `I discovered a new skill: ${name}`;
 
-      const notifyDiscovery = async (productId: ProductId, summary: BeSkillSummary) => {
-        // The event only carries a summary (no `content`) - fetch the full record so the
-        // spotlight/compendium has a reason to show the moment it opens, not a blank one
-        // until the next poll.
-        let skill: Skill;
-        try {
-          const record = await unwrap<BeSkillRecord>(
-            await fetch(`/api/characters/${productId}/skills/${summary.id}`),
-          );
-          skill = toSkill(record);
-        } catch {
-          skill = toSkill({ ...summary, content: '' });
-        }
+      const notifyDiscovery = (productId: ProductId, summary: BeSkillSummary) => {
+        // The event already carries title/summary in both languages - same
+        // shape `/skills` and `/skills/:id` return, so no extra fetch needed.
+        const skill = toSkill(summary, getLang());
         const event: SkillDiscoveredEvent = {
           characterId: productId,
           skill,
@@ -385,7 +391,7 @@ function createHttpClient(getLang: GetLang): ApiClient {
           } catch {
             return; // A malformed event is not worth tearing the connection down for.
           }
-          if (event.type === 'skillDiscovered') void notifyDiscovery(productId, event.skill);
+          if (event.type === 'skillDiscovered') notifyDiscovery(productId, event.skill);
         };
 
         source.onerror = () => {

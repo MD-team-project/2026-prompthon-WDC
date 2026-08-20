@@ -1,7 +1,7 @@
 import { StateGraph, StateSchema, START, END } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
-import type { AppContextEvent, ProductId, UsageEvent } from "@prompthon/shared";
+import type { AppContextEvent, Bilingual, ProductId, UsageEvent } from "@prompthon/shared";
 import { exaoneReasoning, extractReasoning } from "../models/exaone.js";
 import { readWindow } from "../data/usage.js";
 import { readContextWindow, withToday } from "../data/appContext.js";
@@ -23,7 +23,9 @@ const DiscoveryState = new StateSchema({
   productId: z.string(),
   events: z.array(z.any()).default(() => []),
   context: z.array(z.any()).default(() => []),
-  title: z.string().optional(),
+  title: z.any().optional(),
+  kind: z.string().optional(),
+  summary: z.any().optional(),
   content: z.string().optional(),
   found: z.boolean().default(false),
 } as any);
@@ -61,28 +63,52 @@ Days (JSON):
 ${JSON.stringify(days)}
 
 Look for ONE clear, recurring pattern. Two kinds count:
-1. A context-correlated pattern - the user consistently chooses different device settings depending on that day's context (e.g. a different massage zone or intensity on rainy days versus clear days, or different settings on days they walked a lot versus days they spent hours on their phone).
-2. A plain recurring pattern - the user chooses the same device settings on most days regardless of context (context may be missing or irrelevant).
+1. A context-correlated pattern - the user consistently chooses different device settings depending on that day's context (e.g. a different massage zone or intensity on rainy days versus clear days, or different settings on days they walked a lot versus days they spent hours on their phone). This kind becomes a "buff": a passive trait that activates automatically under a condition, like a weather-triggered buff in a game.
+2. A plain recurring pattern - the user chooses the same device settings on most days regardless of context (context may be missing or irrelevant). This kind becomes an "action": a fixed routine the character can perform on command, like a skill you actively cast.
 
-Prefer a context-correlated pattern if the data genuinely supports one - it is the more specific, more interesting finding. Only report a plain recurring pattern if no context correlation holds up under the data.
+Prefer a context-correlated pattern (buff) if the data genuinely supports one - it is the more specific, more interesting finding. Only report a plain recurring pattern (action) if no context correlation holds up under the data.
 
-If you find one, respond with:
-- A first line exactly: TITLE: <short title>
-- Followed by the full skill as Markdown: a title heading, a description of the pattern (state the context condition explicitly if the pattern is context-correlated), what it suggests about the user's needs, and what the character could do about it in the future.
+Name it like a game would, not like a lab report. "Rain Ward" or "우천 결계", not "Weather-Dependent Massage Setting Pattern" or "날씨 기반 마사지 설정 패턴" - 2 to 4 words, evocative of the effect (the body part, the feeling, the trigger), never a literal restatement of "massage chair setting pattern" or the raw parameter names. A player should want the skill because of its name before reading what it does.
+
+If you find one, respond with exactly this structure and nothing else:
+TITLE_KO: <short, catchy, game-skill-style Korean name>
+TITLE_EN: <short, catchy, game-skill-style English name>
+KIND: buff or action (buff if context-correlated, action if plain recurring)
+SUMMARY_KO: <one line, roughly 3 short sentences in Korean, no line breaks - what FE shows in the skill list>
+SUMMARY_EN: <one line, roughly 3 short sentences in English, no line breaks - what FE shows in the skill list>
+CONTENT:
+<the full skill as Markdown - a title heading, a description of the pattern (state the context condition explicitly if the pattern is context-correlated), what it suggests about the user's needs, and what the character could do about it in the future>
 
 If nothing stands out as a genuine recurring pattern, respond with exactly this and nothing else:
 NO_PATTERN_FOUND`;
 }
 
-function parseResponse(text: string): { title: string; content: string } | null {
+function parseResponse(
+  text: string,
+): { title: Bilingual; kind: "buff" | "action"; summary: Bilingual; content: string } | null {
   const trimmed = text.trim();
-  if (!trimmed.startsWith("TITLE:")) return null;
-  const newlineIdx = trimmed.indexOf("\n");
-  if (newlineIdx === -1) return null;
-  const title = trimmed.slice("TITLE:".length, newlineIdx).trim();
-  const content = trimmed.slice(newlineIdx + 1).trim();
-  if (!title || !content) return null;
-  return { title, content };
+  const marker = "\nCONTENT:";
+  const contentIdx = trimmed.indexOf(marker);
+  if (!trimmed.startsWith("TITLE_KO:") || contentIdx === -1) return null;
+
+  const header = trimmed.slice(0, contentIdx);
+  const content = trimmed.slice(contentIdx + marker.length).trim();
+
+  const field = (key: string): string | null => {
+    const line = header.split("\n").find((l) => l.startsWith(`${key}:`));
+    const value = line?.slice(key.length + 1).trim();
+    return value || null;
+  };
+
+  const titleKo = field("TITLE_KO");
+  const titleEn = field("TITLE_EN");
+  const kindRaw = field("KIND")?.toLowerCase();
+  const kind = kindRaw === "buff" || kindRaw === "action" ? kindRaw : null;
+  const summaryKo = field("SUMMARY_KO");
+  const summaryEn = field("SUMMARY_EN");
+  if (!titleKo || !titleEn || !kind || !summaryKo || !summaryEn || !content) return null;
+
+  return { title: { ko: titleKo, en: titleEn }, kind, summary: { ko: summaryKo, en: summaryEn }, content };
 }
 
 // State typing rides on the same `as any` above, so node params are typed
@@ -91,7 +117,9 @@ type DiscoveryStateValue = {
   productId: ProductId;
   events: UsageEvent[];
   context: AppContextEvent[];
-  title?: string;
+  title?: Bilingual;
+  kind?: "buff" | "action";
+  summary?: Bilingual;
   content?: string;
   found: boolean;
 };
@@ -131,7 +159,7 @@ const graph = new StateGraph(DiscoveryState)
     // seed data is more likely one unlucky sample than a real absence, and a
     // live retriggered demo-mid-run is a bad failure mode. Retry once, same
     // run, before accepting "no pattern" as final.
-    let parsed: { title: string; content: string } | null = null;
+    let parsed: { title: Bilingual; kind: "buff" | "action"; summary: Bilingual; content: string } | null = null;
     for (let attempt = 1; attempt <= 2 && !parsed; attempt++) {
       console.log(
         `[exaone:${state.productId}] invoke (attempt ${attempt}) <- ${days.length} days (${state.context.length} with context)`,
@@ -155,12 +183,18 @@ const graph = new StateGraph(DiscoveryState)
       return { found: false };
     }
     publish(state.productId, { type: "discoveryProgress", productId: state.productId, phase: "found" });
-    return { found: true, title: parsed.title, content: parsed.content };
+    return { found: true, title: parsed.title, kind: parsed.kind, summary: parsed.summary, content: parsed.content };
   })
   .addNode("save", async (state: DiscoveryStateValue) => {
     console.log(`[discovery:${state.productId}] save`);
-    if (state.found && state.title && state.content) {
-      const skill = await putSkill({ productId: state.productId, title: state.title, content: state.content });
+    if (state.found && state.title && state.kind && state.summary && state.content) {
+      const skill = await putSkill({
+        productId: state.productId,
+        title: state.title,
+        kind: state.kind,
+        summary: state.summary,
+        content: state.content,
+      });
       const { content, ...summary } = skill;
       publish(state.productId, { type: "skillDiscovered", productId: state.productId, skill: summary });
     }
@@ -172,7 +206,7 @@ const graph = new StateGraph(DiscoveryState)
   .addEdge("save", END)
   .compile();
 
-export async function runDiscoveryGraph(productId: ProductId): Promise<{ found: boolean; title?: string }> {
+export async function runDiscoveryGraph(productId: ProductId): Promise<{ found: boolean; title?: Bilingual }> {
   const result = (await graph.invoke({ productId })) as DiscoveryStateValue;
   return { found: result.found, title: result.title };
 }
