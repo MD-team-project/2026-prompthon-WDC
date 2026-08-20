@@ -1,0 +1,296 @@
+# FE Code Generation Summary
+
+**Stage**: CONSTRUCTION - Code Generation, Part 2
+**Unit**: FE
+**Generated**: 2026-08-20T09:15:00Z
+**Revised**: 2026-08-20T21:45:00Z, after a UI iteration pass and real character art
+**Branch**: `aidlc/construction-fe`
+**Plan**: `aidlc-docs/construction/plans/fe-code-generation-plan.md`, 23 steps, all complete
+
+## What the revision covers
+
+The first version of this summary described the code as generated. The screen was
+then iterated on directly - the character got real art, the stat header split, the
+speech area stopped being a chat column - and this document had drifted far enough
+to be misleading, naming a `StatHeader.tsx` that no longer exists and omitting
+three components that do.
+
+Everything below is re-checked against the files on disk. The functional design
+artifacts were corrected in the same pass; `frontend-components.md` and
+`business-logic-model.md` carry the reasoning, and this file carries the inventory.
+
+## Verification
+
+Re-run for the revision, not carried over.
+
+| Check | Result |
+|---|---|
+| `tsc --noEmit` | Clean, strict mode with `noUnusedLocals` and `noUnusedParameters` |
+| `vitest run` | **26 passed** in 2 files - 8 property-based, 18 example-based |
+| `vite build` | Succeeds. 29 modules. **175.28 kB JS / 56.19 kB gzipped**, **22.10 kB CSS / 5.27 kB gzipped**, 1.57 kB HTML |
+| `npm audit` | **0 vulnerabilities** |
+| Dev server | Starts, serves, every module transforms, the `shared` workspace resolves |
+
+CSS roughly doubled over the first pass (805 to 1910 lines) and the gzipped
+stylesheet grew by 2.6 kB. That is the cost of the layout rework and the sprite
+stage, and it is paid in a file that gzips well.
+
+Not counted in the bundle: **2.3 MB of character frames** under `public/`, served
+as static files rather than bundled. That is the real weight added, and it is
+worth stating plainly rather than hiding behind a JS figure that barely moved.
+
+Tests are executed here as verification. Build and Test is where they become part
+of the joint pipeline.
+
+## Files created
+
+**Shared surfaces** - created by FE because FE started first. All minimal, so a
+merge conflict is a few lines. BE and INFRA should change what is wrong.
+
+| Path | Lines |
+|---|---|
+| `package.json` | 13 |
+| `.gitignore` | modified, added `node_modules/`, `dist/`, `*.tsbuildinfo`, `.DS_Store` |
+| `.github/workflows/ci.yml` | 41 |
+| `packages/shared/package.json` | 8 |
+| `packages/shared/src/types.ts` | 139 |
+
+**Frontend**
+
+| Path | Lines | What |
+|---|---|---|
+| `packages/frontend/package.json` | 28 | Three runtime deps, eight dev |
+| `packages/frontend/tsconfig.json` | 22 | |
+| `packages/frontend/vite.config.ts` | 34 | Vite plus Vitest, shared alias, `/api` proxy |
+| `packages/frontend/index.html` | 37 | |
+| `packages/frontend/README.md` | 103 | How to run, mock controls, notes for BE |
+| `src/main.tsx` | 15 | |
+| `src/App.tsx` | 276 | All state, all network calls, one SSE connection, plus `ConnectionBanner` |
+| `src/state.ts` | 446 | Reducer, actions, selectors |
+| `src/api.ts` | 176 | Client interface, HTTP implementation, flag selection |
+| `src/mock.ts` | 391 | Canned backend with a scripted SSE stream |
+| `src/pure.ts` | 118 | Seven pure functions and the input caps |
+| `src/strings.ts` | 186 | `ko`/`en` dictionaries, attribute labels |
+| `src/components/CharacterView.tsx` | 262 | The character screen. HUD with the progression pill, stage, swipe, sheets |
+| `src/components/CharacterStage.tsx` | 218 | Sprite playback, level-up and discovery effects, placeholder fallback |
+| `src/components/SkillCompendium.tsx` | 181 | Sheet, cards, invoke and talk |
+| `src/components/InputBar.tsx` | 173 | Text, mic, validation, feedback context |
+| `src/components/SpeechArea.tsx` | 170 | Stage caption, plus `ConversationSheet` and `SpeechBubble` |
+| `src/components/RosterView.tsx` | 124 | Roster, tiles, badges, language toggle |
+| `src/components/SpotlightCard.tsx` | 100 | Latest-discovery toast, gated on the character's reaction |
+| `src/components/DeviceStatStrip.tsx` | 79 | Device state as one panel, generic renderer |
+| `src/components/CharacterSwitcher.tsx` | 67 | Dots for the other characters |
+| `src/styles.css` | 1910 | Mobile-first, per-product properties, keyframes, sprite stage |
+| `tests/pure.test.ts` | 426 | Example-based, clamp check first |
+| `tests/pure.pbt.test.ts` | 109 | Property-based |
+| `tests/generators.ts` | 85 | Domain generators |
+| `tests/setup.ts` | 22 | PBT seed configuration and logging |
+
+**Assets** - real character art, not placeholders:
+
+| Path | Files |
+|---|---|
+| `public/characters/massagechair/levelup/frame-{0..55}.webp` | 56 |
+| `public/characters/massagechair/surprise/frame-{0..64}.webp` | 65 |
+
+`pral` and `shoecase` have no art directory and render the CSS placeholder.
+
+### How this differs from the first pass
+
+Components live in **9 files**, not 7. The first pass planned `StatHeader.tsx`
+holding progression and device state as two separate props; it was split instead,
+which is the more interesting outcome:
+
+| Then | Now |
+|---|---|
+| `StatHeader.tsx` | **Gone.** Progression became a pill inside `CharacterView`'s HUD; device state became `DeviceStatStrip.tsx` |
+| — | `CharacterSwitcher.tsx`, so switching characters no longer means returning to the roster |
+| — | `SpotlightCard.tsx`, so a discovery leaves a trace the next line of speech cannot push away |
+| `ConversationLog` planned as its own component | Never built. It was the same list with the same props as `ConversationSheet`, which absorbed it |
+
+**The split made FE-R-2 stronger, which is why it is worth recording rather than
+just noting.** One component holding both data classes as separate props relies
+on nobody merging them later. Two components that cannot reach each other's data
+removes the option: `DeviceStatStrip` has no prop that could carry a level, and
+`CharacterStage` takes no progression at all - only booleans saying whether an
+effect is playing.
+
+Four behavioural changes came with it:
+
+1. **The flex budget inverted.** The speech area had `flex: 1` with the character
+   fixed at 176px, which made the screen a chat client with an avatar on top - the
+   opposite of what Q5 D decided. The stage grows now and the utterance is a
+   caption beneath it. This is the change that makes an announcement read as the
+   character speaking.
+2. **A discovery reaction exists**, driven by new `discovery` state per character
+   alongside `levelUp`, with a `discovery/done` action. Recorded as FE-R-10b.
+3. **The spotlight waits for the reaction to finish.** The one place anything is
+   sequenced, and it is cheap because the effect reports its own completion rather
+   than being raced against a timer.
+4. **Characters switch without leaving the screen**, by dot or by swipe, with the
+   wrap-around in the pure `neighbourId` so it is a unit test rather than something
+   found by swiping past the last character on stage.
+
+## The one check that matters most
+
+`tests/pure.test.ts`, "renders the clamped value, not the number the conversation
+was about".
+
+A response whose `deviceState` says 25 minutes and whose `text` mentions both 30
+and 25 goes through the reducer. The test asserts the stats carry 25, and that no
+attribute anywhere carries 30. A second test applies a response with prose
+claiming 40 and no `deviceState`, and asserts nothing changed.
+
+That is FR-5.5 as an executable statement, and it is the five-second proof the
+demo puts in front of judges.
+
+**It is a unit test on a pure reducer, with no DOM.** The rule lives at the state
+layer, so testing it there needed no `jsdom` and no testing-library - two
+dependencies the unit does not have as a result.
+
+## How the invariants are enforced
+
+Structurally, not by discipline. The unsafe path is absent from the type surface
+rather than discouraged.
+
+| Rule | Enforcement |
+|---|---|
+| FE-R-1, stats never from text | `ChatMessage` has one textual field and no state fields. `DeviceStats` is only ever constructed from a response's `deviceState`. No function anywhere takes a string and returns stats |
+| FE-R-2, no merging | Progression renders from `character` in `CharacterView`'s HUD. `DeviceStatStrip` takes `deviceStats` and has no prop that could hold a level. `CharacterStage` takes no progression at all. No component can reach both |
+| FE-R-3, no prediction | `pending` is `Record<string, boolean>`. There is no shape that could carry a predicted value. The marker renders on the stats block, not per attribute |
+| FE-R-7, no control panel | `DeviceStatStrip` renders a `<section>` wrapping a `<dl>` and nothing interactive |
+| FE-R-24, `lang` everywhere | Attached in `api.ts`, read through a ref. No call site passes it, so no call site can forget |
+| FE-R-27, one SSE connection | Opened once in `App`'s mount effect, keyed on the client instance. Not reachable from a character screen |
+
+## Ponytail review
+
+Two review-fix cycles ran before this summary, per the dispatcher. The
+`ponytail-reviewer` sub-agent is **not registered in this environment**, so its
+definition and `review.md` were read and the review applied directly. Recorded
+because it is a deviation from the configured mechanism, not because the review
+was skipped.
+
+**Cycle 1, seven findings, all applied:**
+
+| Finding | Action |
+|---|---|
+| `api.ts` `delete:` `ApiError` and its `code` field, read by nobody | Removed the class and the JSON error-body parsing. FE picks wording by which call failed, not by code |
+| `api.ts` `native:` hand-rolled exponential backoff over `EventSource` | Removed. EventSource reconnects on its own and honours the server's `retry:`. A fixed retry remains for the one case the platform does not cover - `readyState === CLOSED`, which is what a dev-server proxy failure produces |
+| `mock.ts` `native:` `clone()` as a JSON round-trip | `structuredClone` |
+| `RosterView.tsx` `delete:` `lang` prop declared and never used | Removed from the props and the call site |
+| `SpeechArea.tsx` `shrink:` `length === 0 ? null : map()` | Mapping an empty array already yields nothing |
+| `strings.ts` `delete:` `StringKey` exported, imported nowhere | Removed |
+| `vite.config.ts` `delete:` `port: 5173`, which is the default | Removed |
+
+**Cycle 2, three findings, two applied:**
+
+| Finding | Action |
+|---|---|
+| `InputBar.tsx` `shrink:` `maxLength={INPUT_MAX_LENGTH * 2}` | Collapsing whitespace only ever shortens, so the doubling bought nothing |
+| `mock.ts` `shrink:` two module-level `let`s used only inside `__mock` | Call `handlers` directly |
+| `types.ts` `delete:` `SendMessageRequest` unused by FE | **Not applied.** Typed `postJson` against it instead, so the request body is checked against the contract BE reads rather than only described in it |
+
+Net effect: roughly 45 lines removed, one dependency-free platform feature
+adopted in place of hand-rolled logic.
+
+## PBT compliance
+
+Partial enforcement: PBT-02, 03, 07, 08, 09 are blocking.
+
+| Rule | Status | Note |
+|---|---|---|
+| PBT-01 property identification | **Compliant** | Testable Properties section added to `business-rules.md` during planning, when the gap was found |
+| PBT-02 round-trip | **N/A** | FE decodes responses and never encodes domain objects, so no inverse pair exists. Recorded with the reason rather than left unexplained |
+| PBT-03 invariant | **Compliant** | 6 invariant properties over 4 of the 7 pure functions: `normalizeInput` idempotence, cap, no edge whitespace; `progressRatio` range; `resolveLabel` non-empty; dictionary key parity. The other three - `isSendable`, `inputLength`, `neighbourId` - are covered example-based, the first two being thin wrappers and the third having two interesting cases rather than a population |
+| PBT-04 idempotency | Advisory | Covered anyway - `normalizeInput` idempotence is tested |
+| PBT-05 oracle | **N/A** | No reference implementation exists to compare against |
+| PBT-06 stateful | **N/A** | The reducer is pure. Its transitions are covered example-based |
+| PBT-07 generator quality | **Compliant** | `tests/generators.ts` holds domain generators - message-like text with realistic whitespace, exp pairs constrained to real ranges plus boundaries, attribute keys in the shapes BE actually produces. No bare primitive generator stands in for a domain-typed parameter |
+| PBT-08 shrinking and seed | **Compliant** | Default shrinking. Seed logged every run, replayable with `PBT_SEED`. Runs in CI. Required setting `disableConsoleIntercept` - Vitest 4 attaches console output to a task, which swallowed the seed line from the setup file |
+| PBT-09 framework | **Compliant** | fast-check 3.23.1, pinned exact in `devDependencies` |
+| PBT-10 complementary | **Compliant** | The critical path has an explicit example-based test. PBT is not the sole coverage for anything |
+
+**No blocking PBT findings.**
+
+## Security notes
+
+| Item | State |
+|---|---|
+| Credentials in the bundle | None. Audio goes to BE, which holds the Transcribe credential (NFR-1.2) |
+| Sensitive data endpoints | None requested. A skill's `reason` is agent-authored prose, never raw provenance (FR-5.11) |
+| Input validation | Client-side is UX. BE owns the trust boundary and validates independently (NFR-1.3) |
+| Prompt-injection guard | Deliberately absent from FE. NFR-1.4 is a trust-boundary control and a browser is not a trust boundary |
+| Dependency advisories | 0. Required upgrading vite 5 to 8 and vitest 2 to 4 - six advisories on the 5.x line all traced to `esbuild <=0.24.2`, including a critical Vitest RCE. All dev-only, all now cleared |
+| Dependency versions | All pinned exact, with one intended exception: `@prompthon/shared` is `"*"` because it is a workspace package resolved from the repo, not from the registry |
+
+## Dependencies as they now stand
+
+**Runtime, three**: `react` 18.3.1, `react-dom` 18.3.1, `@prompthon/shared` `*`.
+
+**Dev, eight**: `vite` 8.2.2, `@vitejs/plugin-react` 6.1.0, `typescript` 5.6.3,
+`vitest` 4.1.11, `fast-check` 3.23.1, `@types/node` 22.20.1, `@types/react`
+18.3.12, `@types/react-dom` 18.3.1.
+
+The first pass said "two runtime, seven dev" and omitted the workspace dependency
+and the two React type packages. Corrected rather than left as a number nobody
+would re-count.
+
+## What is deliberately absent
+
+Router, state library, UI kit, `i18next`, `jsdom`, testing-library, React context,
+WebSocket audio path, locked skill slots, FE-side retry, FE-side injection guard,
+Dockerfile, deploy script.
+
+Each is recorded with a reason in the plan's section 8, so the absences read as
+decisions rather than omissions. `jsdom` and testing-library stayed out because
+the FR-5.5 check lives on a pure reducer; context stayed out because the tree is
+two levels deep and `CharacterView` was the only consumer.
+
+**Two items left this list**, and pretending otherwise would be the kind of stale
+claim that makes a summary worth less than no summary:
+
+- **Character artwork.** The massage chair now has 121 real frames across two
+  sequences. Still not *per-level* artwork - the sequences are per-reaction, and
+  no illustration changes with level - but "placeholder art everywhere" is no
+  longer true, and `types.ts` still says "Placeholder art for now" against
+  `artRef`, which is now only true of two products out of three.
+- **A demo trigger for discovery.** `__mock.announce(n)` is exactly that, for the
+  mock. It does not touch the real risk, which is making a *real* BE run fire on
+  cue - see below.
+
+## What the revision left open
+
+| Item | State |
+|---|---|
+| FR-2.5, cosmetic evolution by level | **Partly met.** The level layer survives on the roster tile ring and was removed from the character stage when real art arrived, because a ring around an illustration reads as decoration rather than as the character advancing. Cosmetic evolution is second in the drop order, so this is a legitimate thing to leave open - recorded in FE-R-10 rather than reworded to sound met |
+| `artRef` resolution | Carried and passed down, but nothing reads it. The massage chair's frame paths are hardcoded. Fine at one art set, wrong at two |
+| Frame preloading | None. Frames are plain `<img src>` swaps, so a cold first playthrough can stutter. 2.3 MB total, so a warm cache hides it; a preload pass is the fix if it looks bad on stage |
+
+## Open items for BE
+
+Two structural asks, and one risk.
+
+1. **One SSE stream for all three characters**, each event carrying `characterId`.
+   A per-character stream cannot deliver an announcement for a character the user
+   is not viewing, and the roster badge depends on that.
+2. **`deviceState` always a separate field from reply text.** FE's FR-5.5
+   enforcement is that no function turns a string into stats, which only holds if
+   the response separates them.
+3. **RISK - how discovery is made to fire on cue for the demo.** FR-5.10 triggers
+   on accumulated data volume, so timing is outside the presenter's control. FE
+   has no lever and no fallback if it stays silent. Against the mock the beat
+   works; against real BE it is unverified. This needs settling early rather than
+   at rehearsal.
+
+Everything else in `backend-mock-contract.md` is a proposal and expected to change.
+
+## Note for the hour-5.5 checkpoint
+
+The mock's SSE stream is in-process, so it cannot prove real SSE behaviour through
+a dev-server proxy or a buffering intermediary - which is where SSE actually
+breaks. An SSE route that emits one hardcoded event is enough to find out, and it
+is worth doing **before** the checkpoint rather than at it.
+
+The `api.ts` retry path was written against exactly this failure: a proxy that
+kills the stream fatally puts `EventSource` into `CLOSED`, where the browser stops
+retrying on its own.

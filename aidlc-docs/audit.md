@@ -987,3 +987,153 @@ Committing all INCEPTION artifacts and opening a PR for merge as requested."
 
 ---
 
+## CONSTRUCTION - FE Unit, Functional Design Started
+**Timestamp**: 2026-08-20T08:00:00Z
+**User Input**: "AI-DLC Construction, FE 유닛 담당. Functional Design부터 시작"
+**AI Response**: "Started the FE unit's Construction track. Created branch `aidlc/construction-fe` per the parallel working conventions.
+
+Read the inherited context rather than assuming it: unit-of-work.md for FE scope, unit-of-work-story-map.md for the 4 primary and 6 contributing stories, unit-of-work-dependency.md, the collapsed application-design.md, requirements.md, stories.md and personas.md. Confirmed the workspace still has no `packages/` directory, so FE starts from nothing.
+
+Executed functional-design.md Steps 1 and 2. Created `aidlc-docs/construction/plans/fe-functional-design-plan.md` containing: FE's inherited scope, a table of the eleven requirement-level constraints that bind FE specifically with what each one means in practice, ten plan steps with checkboxes, fourteen embedded questions, six decisions defaulted rather than asked, and four risks carried forward.
+
+Three things in the plan are judgements rather than transcription, recorded so they can be overruled:
+
+1. **An extra artifact, S9 `backend-mock-contract.md`.** Application Design deliberately left route paths, payload shapes and SSE event names unfixed, to be settled directly by FE and BE during Construction. FE cannot mock a backend without writing down what it is mocking, and that written-down thing is FE's half of the negotiation. Kept separate from frontend-components.md so it can be handed to BE and revised without touching component design.
+
+2. **Six decisions defaulted instead of asked** - localStorage for language preference, no chat persistence, client-side validation as UX with BE owning the trust boundary, no FE-side injection guard, plain CSS with no UI kit, and no demo trigger for discovery. Each is either stated outright by a story or has no reasonable alternative. Listed in a table with the reason, so overriding any of them costs one line.
+
+3. **Q1 asks for a framework choice.** Functional Design is nominally technology-agnostic, but no prior stage picked one, requirements fix only TypeScript and mobile-first browser, and Code Generation follows immediately. Asking now is cheaper than discovering the gap mid-generation.
+
+Also flagged, not resolved: FR-1.5 was revised so device state shape is per-product and not fixed system-wide, while the scaffolding phase defers product-authentic data - which makes 'how does the stats view render' a real design question rather than a layout preference. That is Q3.
+
+Two risks worth surfacing before answers arrive. First, the demo's strongest beat - autonomous discovery firing unprompted - depends on a data-volume threshold crossing during the show, and FE has no control over it and no fallback if it stays silent; that needs settling with BE early rather than at rehearsal. Second, SSE breaks in places a fake stream will not reveal, such as dev-server proxies and buffering intermediaries, so a real SSE connection is worth attempting before hour 5.5 rather than at it.
+
+Stopped at Step 3, waiting for answers. No design artifacts written yet."
+**Context**: CONSTRUCTION - FE, Functional Design Step 2 complete. Waiting on 14 question answers before Steps 5-9.
+
+---
+## CONSTRUCTION - FE, Functional Design Questions Answered
+**Timestamp**: 2026-08-20T08:25:00Z
+**User Input**: "각각 한국어로 질문해줘 내가 대답하면 채워줘" / "A" (Q1) / "A" + "앞으로의 질문에서 이번 해커톤 구현에서 추천하는 방식 알려줘" (Q2) / "A" (Q3) / "A" (Q4) / "chat 보다는 캐릭터와의 상호작용이 중심이야. 하지만 chat을 확인할 수는 있어야해. 메인 캐릭터 상단에는 현재 스탯을 표기 (ex. 경험치, 친밀도, 레벨 등) 스킬도 마치 게임의 도감처럼 확인할 수 있으면 좋겠어. 어떤게 좋을까?" / "1 ok. 2. 친밀도는 예시로 든거니까 친밀도에 과대 의미부여하지마. 친밀도 제거. 경험치로 통일해도 됌. 3. ok" (Q5) / "D로해줘" (Q6) / "추천대로" (Q7) / "C로 일단 진행해줘" (Q8) / "추천대로" (Q9) / "추천대로" (Q10) / "응" (Q11) / "추천대로해줘" (Q12) / "B" (Q13) / "B" (Q14)
+**AI Response**: "Asked all 14 questions one at a time in Korean in chat and transcribed each answer into the plan file, which stays the artifact of record - the working convention already established in aidlc-state.md. From Q3 onward, added an explicit recommendation with reasoning to each question, per the user's request.
+
+Final answer set: Q1 A React+Vite, Q2 A in-app mock behind an env flag, Q3 A generic stat renderer, Q4 A no router, Q5 D character-centric four-layer layout, Q6 D invoke button plus card-initiated feedback carrying skillId, Q7 A always-visible reason on the card, Q8 C placeholder art inside A's structure, Q9 B in-place level-up effect, Q10 C record-then-POST with an editable transcript draft, Q11 A plain dictionary, Q12 C failures split by class, Q13 B neutral in-flight marker, Q14 B badge for off-screen announcements.
+
+**Q5 was a reframe rather than an answer** and it changed the unit's shape. The user moved the centre of the screen from chat to the character. Wrote a new option D for it - stat header, character stage, speech bubble with the log on demand, pinned input bar, and the skill list as a game-compendium overlay - and recorded why D beats B: an announcement arriving as a log line and a character speaking to you unprompted are the same data with different persuasive force, and D puts the level-up effect and the speech bubble in one frame.
+
+Three things raised by that message needed decisions rather than silent implementation, and all three were resolved with the user:
+1. **Intimacy (친밀도) removed.** It appeared in the user's message as an example. FR-2.1 defines exp and level only, so a second axis would need an increase rule, a BE field, and a relationship to level - and level is already the presentation device for discovery per FR-2.4, so a second axis would dilute it. User confirmed: do not over-read the example, exp only.
+2. **The stat header mixes two data classes.** Progression comes from the character store; device state comes from a structured device response and is bound by FR-5.5. Settled as one component with two separate props, never merged into one array, on the grounds that merging makes reading from the convenient field syntactically available - the exact failure the execution plan names.
+3. **No empty or locked compendium slots.** The compendium metaphor is good but N empty slots imply a predetermined finite catalogue, which is the opposite of the product's claim, and FR-2.4 and US-3.3 state nothing is gated. One non-enumerating closing line instead.
+
+Ran the Step 4 consistency check. No contradictions. Four interactions needed a stated resolution: the Q13 marker attaches to the stats block rather than to individual keys because a generic renderer cannot know which key a request affects and guessing would reintroduce prediction; with placeholder art the appearance change is the CSS level layer alone; the mock's fake SSE must emit for all three characters or the badge flow is untestable; and Q5 D made Q9's option A self-defeating rather than merely worse, which is a change of reasoning worth recording. Also noted that Q8 retires open item 3 in requirements.md section 7.
+
+Generated five artifacts under `aidlc-docs/construction/fe/functional-design/`. Four are the stage default; `backend-mock-contract.md` is the extra one flagged in the plan.
+
+Two design choices in the artifacts are load-bearing and worth naming here. First, **FR-5.5 is enforced structurally rather than by discipline**: ChatMessage carries exactly one textual field and no state fields, DeviceStats is constructible only from a response's deviceState object, and no function in FE accepts a string and returns stats - so the unsafe path is absent from the type surface instead of merely discouraged. StatHeader has no prop that can hold a progression value and a device value in the same slot, for the same reason. Second, **two structural asks were sent to BE** rather than assumed: one SSE stream for all three characters, and deviceState always separate from reply text. Both change FE's architecture rather than its parsing, so they are the two worth settling first.
+
+Carried four open items to BE, one of which is a real risk: how discovery is made to fire on cue. FR-5.10 triggers on accumulated data volume, so timing is outside the presenter's control, FE has no lever, and there is no fallback if it stays silent during the demo.
+
+Also recorded that a scripted in-process mock cannot prove real SSE behaviour through dev-server proxies and buffering intermediaries, and that an SSE route emitting one hardcoded event is enough to find out - which makes it worth doing before the hour-5.5 checkpoint rather than at it."
+**Context**: CONSTRUCTION - FE, Functional Design artifacts complete. Awaiting approval at Step 10.
+
+---
+## CONSTRUCTION - FE, Functional Design Approved, Code Generation Part 1 Complete
+**Timestamp**: 2026-08-20T08:45:00Z
+**User Input**: "다음 단계 진행해."
+**AI Response**: "Recorded as approval of FE Functional Design. Loaded `construction/code-generation.md` and, because the Property-Based Testing extension loads at Code Generation, `extensions/testing/property-based/property-based-testing.md`.
+
+**Found and fixed a gap before planning.** PBT-01 requires a Testable Properties section in the functional design artifacts, and there was none. Appended it to `fe/functional-design/business-rules.md`. Four pure functions carry properties - normalizeInput idempotence and cap invariant, progressRatio range, resolveLabel non-empty, plus a structural invariant that the ko and en dictionary key sets match. Recorded round-trip properties as **N/A for FE with a reason**: FE decodes responses and never encodes domain objects, so no inverse pair exists. Also recorded which components have no PBT properties rather than leaving them unmentioned.
+
+**One decision inside that section is worth surfacing.** FE-R-1 - the FR-5.5 invariant - is checked as an **example-based test on the state reducer, not as a property**. It is not a claim quantified over generated inputs; it is a claim about which field one transition reads. Generating variants adds nothing. Putting the check on the reducer rather than on a rendered component also removed `jsdom` and testing-library from the dependency list entirely, because the reducer is pure. The rule is tested where it actually holds.
+
+Created `aidlc-docs/construction/plans/fe-code-generation-plan.md`. 23 numbered steps, two of them deliberate N/A records (no repository layer, no schema) written down so the skips are visible rather than silent.
+
+Three things in the plan are judgements rather than transcription:
+
+1. **16 components land in 7 files.** The functional design's component tree is unchanged; small children are co-located with their parent. Sixteen files for sixteen components, several under ten lines, is file count for its own sake. A mapping table keeps design and code traceable.
+
+2. **Four files are shared surfaces and FE creates them because FE started first**: root `package.json`, `packages/shared/package.json`, `packages/shared/src/types.ts`, and `.github/workflows/ci.yml`. Each kept minimal so a merge conflict is a few lines. Covered by the existing convention that shared files stay shared and one person resolves conflicts. `packages/shared` is seeded with the mock-contract shapes and BE should change anything wrong - that is the file's documented purpose.
+
+3. **CI was added rather than reported as a blocking finding.** PBT-08 is enforced in Partial mode and requires PBT in a CI pipeline. No CI existed. A 15-line workflow running FE tests with a logged seed costs less than the finding would, so it is step 20. It runs FE tests only, since BE and INFRA packages do not exist yet.
+
+Dependency posture: two runtime dependencies, react and react-dom. Five dev: vite, the react plugin, typescript, vitest, fast-check. All pinned exact, no ranges. No router, no state library, no UI kit, no i18next, no jsdom - each listed in a 'what this plan does not build' table with the reason, so absences read as decisions.
+
+Also recorded that deployment artifacts are the Vite build config and nothing more. INFRA owns deployment, and FE producing a Dockerfile would duplicate it.
+
+Presenting the plan summary and waiting for approval at Step 7. No code written yet."
+**Context**: CONSTRUCTION - FE. Functional Design APPROVED. Code Generation Part 1 (Planning) complete, awaiting plan approval before Part 2.
+
+---
+## CONSTRUCTION - FE, Code Generation Plan Approved and Part 2 Complete
+**Timestamp**: 2026-08-20T09:15:00Z
+**User Input**: "문제 없으면 진행해줘"
+**AI Response**: "Recorded as approval of the FE code generation plan. Executed all 23 steps of Part 2.
+
+**Verification, run rather than asserted**: `tsc --noEmit` clean under strict mode with `noUnusedLocals` and `noUnusedParameters`; `vitest run` 26 passed (8 property-based, 18 example-based); `vite build` succeeds at 168 kB JS / 55 kB gzipped; `npm audit` 0 vulnerabilities; dev server starts and every module transforms with the `shared` workspace resolving.
+
+Roughly 24 files. 16 components in 7 files by co-locating small children with their parent, with the component tree unchanged.
+
+**Four things went differently from the plan and are recorded as deviations rather than absorbed silently:**
+
+1. **Dependency upgrade forced by real advisories.** `npm audit` reported 6 advisories on the vite 5 / vitest 2 line, all tracing to `esbuild <=0.24.2`, including a critical Vitest RCE. All dev-only, but the fix was available: vite 8.2.2, vitest 4.1.11, plugin-react 6.1.0, plus @types/node 22.20.1 which vite 8 requires for `node:url` in the config. Now 0 vulnerabilities with tests and build green. Versions stay pinned exact.
+
+2. **`disableConsoleIntercept` had to be set in the Vitest config.** Vitest 4 attaches console output to a task, which swallowed the PBT seed line written from the setup file - and PBT-08 requires that seed visible on every run. Found by checking the output rather than by assuming it worked. Verified both the random-seed log and `PBT_SEED=4242` replay.
+
+3. **The mock's failure and connection-drop are triggerable, not scheduled.** The plan said the mock emits one failure and one drop. Scheduling them means a rehearsal or a live demo can be sabotaged by a timer nobody remembers setting. A keyword in the message text and `__mock.drop()` in the console exercise both presentations on demand, which was the actual purpose.
+
+4. **`resolveLabel` takes the label table as an argument** rather than importing the dictionary, so `pure.ts` imports nothing and stays trivially testable.
+
+**One test caught a real bug during development.** The idempotence property on `normalizeInput` failed initially: slicing at the cap can land on a space, and without a trailing trim a second pass removes it and produces a different result. That is precisely the class of thing example-based testing does not find, and it is why NFR-3.1 scoped PBT to pure functions. Also switched the cap to code points rather than UTF-16 units, so it is meaningful for Korean and cannot cut a surrogate pair.
+
+**One test expectation was wrong rather than the code.** `humanizeKey('reclineAngle')` returns 'Recline Angle'; the test expected 'Recline angle'. Fixed the test - the camelCase split legitimately preserves the capital.
+
+**Ponytail review ran two cycles before this message, per the dispatcher.** The `ponytail-reviewer` sub-agent is NOT registered in this environment, so its definition and `review.md` were read and the review applied directly. Recorded as a deviation from the configured mechanism, not as a skipped review.
+
+Cycle 1, seven findings, all applied. Two were substantive. First, `ApiError` and its `code` field were dead flexibility - nothing read the code, because FE picks failure wording by which call failed, and the JSON error-body parsing existed only to populate a field with no consumer. Second, and better than merely shorter: the hand-rolled exponential backoff over `EventSource` was reimplementing a platform feature worse than the platform does it, since native retry honours the server's `retry:` field. Removed it, keeping a plain fixed retry for the one case the platform does not cover - `readyState === CLOSED`, which is exactly what a dev-server proxy failure produces, and therefore exactly the SSE risk already flagged. The rest: `structuredClone` for a JSON round-trip, a dead `lang` prop in RosterView, a pointless empty-array ternary, an unused `StringKey` export, and `port: 5173` which is vite's default.
+
+Cycle 2, three findings, two applied. `maxLength={INPUT_MAX_LENGTH * 2}` - collapsing whitespace only ever shortens, so the doubling bought nothing. Two module-level `let`s in the mock used only inside `__mock`. The third finding, `SendMessageRequest` unused by FE, was **not** applied as a deletion: typing `postJson` against it is better than removing it, because the request body then gets checked against the contract BE reads rather than only being described in it.
+
+Net roughly 45 lines removed and one platform feature adopted in place of hand-rolled logic. Typecheck, tests and build re-verified green after each cycle.
+
+**PBT compliance: no blocking findings.** PBT-02 round-trip is N/A with a stated reason - FE decodes and never encodes, so no inverse pair exists. PBT-05 and PBT-06 are N/A. PBT-03, 07, 08, 09 compliant. The FR-5.5 check is deliberately example-based on the pure reducer rather than a property: it is a claim about which field one transition reads, not a claim quantified over inputs, and putting it on the reducer removed `jsdom` and testing-library from the unit entirely.
+
+Story traceability: all 8 stories marked complete, with US-5.1 qualified - FE delivers every beat it owns, but the discovery beat still depends on BE making a run fire on cue, which is the open risk.
+
+Summary written to `aidlc-docs/construction/fe/code/code-summary.md`. Presenting the Step 14 completion message."
+**Context**: CONSTRUCTION - FE. Code Generation plan APPROVED, Part 2 complete, all 23 steps [x]. Awaiting approval at Step 15.
+
+---
+## CONSTRUCTION - FE, Doc Correction After UI Iteration, and Commit
+**Timestamp**: 2026-08-20T21:45:00Z
+**User Input**: "지금 변경사항까지 일단 커밋 진행. 코드 말고 문서 수정 필요하면 수정해."
+**AI Response**: "Checked the working tree before committing rather than committing what was in front of me, and the check was the useful part: **the code had moved well past the documentation.** `code-summary.md` described a `StatHeader.tsx` that no longer exists, omitted three components that do, and the tree carried 121 `.webp` character frames against docs that said 'placeholder art'. Committing that as-is would have produced a commit whose own summary misdescribed it.
+
+Dispatched a context-gatherer over `packages/frontend` and `packages/shared` to get the real inventory instead of guessing at the diff, then **re-ran verification rather than copying the previous numbers**: `tsc --noEmit` clean, `vitest run` 26 passed in 2 files, `vite build` 29 modules at 175.28 kB JS / 56.19 kB gzipped and 22.10 kB CSS / 5.27 kB gzipped, `npm audit` 0 vulnerabilities. The earlier summary's 168 kB / 10 kB CSS figures were stale, which is what a doubled stylesheet does.
+
+**What had actually changed in the code:**
+
+1. **`StatHeader` was split and deleted.** Progression became a pill in `CharacterView`'s HUD; device state became `DeviceStatStrip`. Worth recording as an improvement rather than a rename: one component holding both data classes as separate props relies on nobody merging them later, whereas two components that cannot reach each other's data removes the option. `CharacterStage` now takes no progression at all - only booleans saying whether an effect is playing. FE-R-2 got stronger.
+2. **The flex budget inverted.** The speech area had `flex: 1` with the character fixed at 176px, making the screen a chat client with an avatar on top - the opposite of what Q5 D decided.
+3. **Real art for one product**: 56 level-up frames and 65 discovery frames at 40ms, 2.3 MB served static rather than bundled. `pral` and `shoecase` keep the CSS placeholder and complete on timers instead of frame counts.
+4. **Three unplanned components** - `DeviceStatStrip`, `CharacterSwitcher`, `SpotlightCard` - and one planned component never built, `ConversationLog`, which was the same list with the same props as `ConversationSheet`.
+
+**One finding is a regression and is recorded as one rather than absorbed.** Removing the CSS level layer from the stage means **FR-2.5, cosmetic evolution driven by level, is now met on the roster tile ring and not on the character screen.** The reason for removing it is sound - a halo ring around an illustration reads as decoration stuck onto the character rather than the character advancing, and the halo also had the character's shoulders occluding the middle of the arc - but the replacement was never built, so this is a requirement moving backwards, not a neutral swap. Left open deliberately, because cosmetic evolution is second in the drop order and a `data-level` tint on the existing floor or aura elements is the cheap close. FE-R-10 carries it as partly held.
+
+Two smaller gaps found the same way and also recorded rather than quietly fixed: **`artRef` is carried and passed down but nothing resolves it** - the massage chair's frame paths are hardcoded template literals, which works at one art set and is wrong at two - and **frames have no preloading**, so a cold first playthrough can stutter.
+
+**Nine documents corrected.** All five `fe/functional-design/` artifacts, `fe/code/code-summary.md`, `fe-code-generation-plan.md`, `packages/frontend/README.md`, and `aidlc-state.md`.
+
+Two judgement calls in how the correction was made:
+
+1. **The code generation plan's executed steps were left intact** and the delta appended as a new section 11. Rewriting `[x] Step 13 StatHeader.tsx` to match today's files would have destroyed the record of what was planned versus what the screen turned out to need, which is the more useful thing to be able to read later.
+2. **`business-rules.md` was corrected by annotation, not replacement.** FE-R-10 keeps its original text and gains a dated revision noting it is now only partly held, rather than being reworded into something that sounds met. Same for FE-R-11's config-resolution half. A rule that quietly changes to match the code stops being a rule.
+
+Also added FE-R-10b for the discovery reaction, which existed in the code with no rule behind it, and corrected the 'four pure functions' claim - `pure.ts` holds seven, four of which carry PBT properties.
+
+**No code was changed**, per the instruction. The one thing that arguably should be is a code comment: `packages/shared/src/types.ts` still says 'Placeholder art for now' against `artRef`, which is now true of two products out of three. Flagged rather than edited.
+
+Committed everything on `aidlc/construction-fe`. Not pushed and no PR opened, since neither was asked for."
+**Context**: CONSTRUCTION - FE. Code and docs now agree. Still awaiting approval at code-generation Step 15. FR-2.5 open as a known cosmetic regression; `artRef` resolution and frame preloading open as smaller gaps. BE/INFRA note: static asset serving is now a real deployment concern.
+
+---

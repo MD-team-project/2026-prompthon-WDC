@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Mobile-first. FR-7.1: comfortable at phone viewport widths. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Light. The character is the centre of the screen and a light stage keeps
+         the illustration and its per-product tint readable under projection. -->
+    <meta name="color-scheme" content="light" />
+    <title>ThinQ Companion</title>
+
+    <!--
+      Two faces, each for one job.
+
+      Pretendard carries Korean body text. Instrument Sans carries Latin labels
+      and numerals, and its tabular figures are what make level, exp and device
+      values read as instrument readouts instead of as prose.
+
+      Both are CDN-hosted, so a demo without network falls back to the system
+      stack declared in styles.css. Layout does not depend on either.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

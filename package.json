@@ -1,0 +1,13 @@
+{
+  "name": "prompthon",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:fe": "npm run dev --workspace @prompthon/frontend",
+    "build:fe": "npm run build --workspace @prompthon/frontend",
+    "test:fe": "npm run test --workspace @prompthon/frontend"
+  }
+}
