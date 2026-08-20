@@ -52,9 +52,33 @@ Opt-in questions are presented in `aidlc-docs/inception/requirements/requirement
 
 ### CONSTRUCTION PHASE - IN PROGRESS, runs per unit in parallel
 - [x] **INFRA: COMPLETE.** Functional Design APPROVED 2026-08-20T09:07:10Z -> Code Generation **APPROVED 2026-08-20T11:40:00Z**, deployed and verified against the live account. See the INFRA deployed-runtime section below
-- [ ] BE: Functional Design -> Code Generation
+- [x] **BE: Functional Design COMPLETE** 2026-08-20T09:41:52Z. Closed on structural decisions S1-S7; the plan file at `construction/plans/be-functional-design-plan.md` is the artifact. Domain artifacts deliberately not generated - domain specifics are parked and get decided against real code
+- [ ] **BE: Code Generation - plan created, awaiting approval.** `construction/plans/be-code-generation-plan.md`, 15 steps plus Step 0
 - [ ] FE: Functional Design -> Code Generation
 - [ ] Build and Test - joint, after all three units
+
+### BE structural decisions (S1-S7)
+| | Decision |
+|---|---|
+| S1 | `createAgent` for control, `StateGraph` for discovery |
+| S2 | Express 5, SSE hand-rolled in one helper |
+| S3 | Concern-based flat directories under `packages/backend/src` |
+| S4 | `tsx` dev, `tsc` build, `tsc --noEmit` separate |
+| S5 | `device-stub` separate process, port 4000 |
+| S6 | Three agents at boot; in-memory checkpointer for conversation, DynamoDB read-and-inject for skills |
+| S7 | Skills reached through `listSkills` and `getSkill` tools, not the system prompt |
+
+### BE settled domain decisions
+- A skill is a **Markdown document** describing a new feature or mode, stored in DynamoDB as a string
+- Skill fields: `id`, `productId`, `title`, `content`, `status`, `createdAt`
+- Discovery threshold: **3 new events**. Ignore re-crossing mid-run, reset after empty run, fixture may fire on first boot
+- Discovery emits **per-phase progress over SSE** so the run is visible
+- **No progression state in BE.** FE derives level from the skill list
+- FR-3.4 relocated: prose cannot be validated, so execution is bounded by the control agent's tool set instead
+- FR-5.11 relocated: no separate provenance field exists, so it becomes a generation-time constraint on what the document may contain
+
+### Parked until their code is written
+Q5 document rewrite semantics · Q6 skills per run · Q7 placeholder capability vocabulary · prompt wording · discovery node internals
 
 **How each owner starts**: on their own branch, open a session and say
 `AI-DLC Construction, {INFRA|BE|FE} 담당` .
