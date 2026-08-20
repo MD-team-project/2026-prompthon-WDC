@@ -4,22 +4,22 @@ import { dirname, join } from "node:path";
 import express from "express";
 import type { AppContextEvent } from "@prompthon/shared";
 import { config } from "./config.js";
-import { chatRouter } from "./routes/chat.js";
-import { skillsRouter } from "./routes/skills.js";
-import { eventsRouter } from "./routes/events.js";
+import { massagechairRouter } from "./routes/massagechair.js";
+import { shoecaseRouter } from "./routes/shoecase.js";
+import { pralRouter } from "./routes/pral.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
 import { seedContext } from "./data/appContext.js";
-// Constructs the three control agents at boot (module-level Map), per S6:
-// strict 1:1:1 binding, held for the process lifetime.
-import "./agents/index.js";
 
 const app = express();
 app.use(express.json());
 
-app.use(chatRouter);
-app.use(skillsRouter);
-app.use(eventsRouter);
+// One router per product (per S6/FR-5.4's strict 1:1:1 binding) - each
+// imports its own dedicated agent, which importing it here constructs and
+// holds for the process lifetime.
+app.use("/api/characters/massagechair", massagechairRouter);
+app.use("/api/characters/shoecase", shoecaseRouter);
+app.use("/api/characters/pral", pralRouter);
 app.use(internalRouter);
 app.use(healthRouter);
 

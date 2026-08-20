@@ -16,3 +16,8 @@ export function readContextWindow(days: number): AppContextEvent[] {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   return context.filter((c) => new Date(c.date).getTime() >= cutoff);
 }
+
+export function getTodayContext(): AppContextEvent | null {
+  const today = new Date().toISOString().slice(0, 10);
+  return context.find((c) => c.date === today) ?? null;
+}

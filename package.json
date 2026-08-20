@@ -4,10 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
+    "infra",
     "packages/*"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "concurrently -n stub,api -c cyan,green \"npm:dev:stub\" \"npm:dev:api\"",

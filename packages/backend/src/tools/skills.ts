@@ -2,6 +2,7 @@ import { tool } from "langchain";
 import * as z from "zod";
 import type { ProductId } from "@prompthon/shared";
 import { deleteSkill, getSkill, listSkills, updateSkillContent } from "../data/skills.js";
+import { checkTodayRelevance } from "../discovery/relevance.js";
 
 /**
  * Skills reach the control agent ONLY through these tools - never listed in
@@ -64,5 +65,18 @@ export function skillTools(productId: string) {
     },
   );
 
-  return [list, get, update, remove];
+  const checkRelevance = tool(
+    async () => {
+      const match = await checkTodayRelevance(id);
+      return match ? match.suggestion : "nothing relevant today";
+    },
+    {
+      name: "checkTodayForRelevantSkill",
+      description:
+        "Check whether today's circumstances match a skill you've already learned, worth proactively bringing up before the user asks. Always call this when the user's message is empty (they just opened the chat) - if it returns a suggestion, lead with it in your own words; if it says nothing relevant, just greet warmly instead.",
+      schema: z.object({}),
+    },
+  );
+
+  return [list, get, update, remove, checkRelevance];
 }

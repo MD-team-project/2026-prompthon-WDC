@@ -1,4 +1,10 @@
 .env
+
+.kiro/skills
+skills-lock.json
+
+node_modules/
 dist
-node_modules
 *.tsbuildinfo
+cdk.out/
+.DS_Store

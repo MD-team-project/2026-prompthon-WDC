@@ -8,10 +8,9 @@ import { deviceAdapter } from "../device/adapter.js";
  * agent must forward it verbatim - never paraphrase or reconstruct device
  * state from what it thinks happened.
  */
-export function deviceTools(productId: string) {
+export function getDeviceStateTool(productId: string) {
   const id = productId as ProductId;
-
-  const getDeviceState = tool(
+  return tool(
     async () => JSON.stringify(await deviceAdapter.getState(id)),
     {
       name: "getDeviceState",
@@ -20,6 +19,29 @@ export function deviceTools(productId: string) {
       schema: z.object({}),
     },
   );
+}
+
+/** One typed tool per device capability - same result-forwarding rule as getDeviceStateTool. */
+export function commandTool(productId: string, name: string, description: string, schema: z.AnyZodObject) {
+  const id = productId as ProductId;
+  return tool(
+    async (params: Record<string, unknown>) => JSON.stringify(await deviceAdapter.applyCommand(id, name, params)),
+    {
+      name,
+      description: `${description} Returns the resulting structured device state - report exactly what this tool returns, it must never be composed from memory.`,
+      schema,
+    },
+  );
+}
+
+/**
+ * Generic fallback for products without a settled, named capability set yet
+ * (currently just Pra.L): discovers capabilities dynamically instead of one
+ * typed tool per capability. ShoeCase and MassageChair use tools/shoecase.ts
+ * and tools/massagechair.ts instead.
+ */
+export function deviceTools(productId: string) {
+  const id = productId as ProductId;
 
   const listCapabilities = tool(
     async () => JSON.stringify(await deviceAdapter.listCapabilities(id)),
@@ -31,7 +53,7 @@ export function deviceTools(productId: string) {
   );
 
   const applyCommand = tool(
-    async ({ capability, params }) =>
+    async ({ capability, params }: { capability: string; params?: Record<string, unknown> }) =>
       JSON.stringify(await deviceAdapter.applyCommand(id, capability, params ?? {})),
     {
       name: "applyCommand",
@@ -44,5 +66,5 @@ export function deviceTools(productId: string) {
     },
   );
 
-  return [getDeviceState, listCapabilities, applyCommand];
+  return [getDeviceStateTool(id), listCapabilities, applyCommand];
 }
