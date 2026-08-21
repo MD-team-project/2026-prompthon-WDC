@@ -2,7 +2,7 @@ import { StateGraph, StateSchema, START, END } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import type { AppContextEvent, Bilingual, ProductId, UsageEvent } from "@prompthon/shared";
-import { exaoneReasoning, extractReasoning } from "../models/exaone.js";
+import { extractReasoning, invokeExaoneWithRetry } from "../models/exaone.js";
 import { readWindow } from "../data/usage.js";
 import { readContextWindow, withToday } from "../data/appContext.js";
 import { deviceAdapter } from "../device/adapter.js";
@@ -184,7 +184,7 @@ const graph = new StateGraph(DiscoveryState)
       console.log(
         `[exaone:${state.productId}] invoke (attempt ${attempt}) <- ${days.length} days (${state.context.length} with context)`,
       );
-      const response = await exaoneReasoning.invoke([new HumanMessage(buildPrompt(days))]);
+      const response = await invokeExaoneWithRetry([new HumanMessage(buildPrompt(days))]);
       const responseText = String(response.content);
       const reasoning = extractReasoning(response) ?? "";
       console.log(`[exaone:${state.productId}] reasoning (attempt ${attempt}) ->\n${reasoning}`);
