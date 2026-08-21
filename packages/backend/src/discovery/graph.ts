@@ -127,12 +127,6 @@ type DiscoveryStateValue = {
 const graph = new StateGraph(DiscoveryState)
   .addNode("loadWindow", async (state: DiscoveryStateValue) => {
     console.log(`[discovery:${state.productId}] loadWindow`);
-    publish(state.productId, {
-      type: "discoveryProgress",
-      productId: state.productId,
-      phase: "started",
-      node: "loadWindow",
-    });
     const events = readWindow(state.productId, 60);
 
     // Today's live reading is folded in so on-stage device events have a
@@ -146,6 +140,17 @@ const graph = new StateGraph(DiscoveryState)
       console.log(`[discovery:${state.productId}] today's context unavailable: ${(err as Error).message}`);
     }
     const context = withToday(readContextWindow(60), today);
+
+    // Published after loading, not before, so this carries what was
+    // actually found - a demo screen showing this node should show real
+    // counts, not just "this node is running".
+    publish(state.productId, {
+      type: "discoveryProgress",
+      productId: state.productId,
+      phase: "started",
+      node: "loadWindow",
+      window: { eventCount: events.length, contextDayCount: context.length },
+    });
 
     return { events, context };
   })

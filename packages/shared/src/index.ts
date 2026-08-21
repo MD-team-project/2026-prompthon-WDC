@@ -180,7 +180,14 @@ export type ControlEvent =
   | { type: "token"; text: string }
   | { type: "deviceState"; state: DeviceState }
   | { type: "done"; reply: AgentReply }
-  | { type: "discoveryProgress"; productId: ProductId; phase: DiscoveryPhase; node: DiscoveryNode }
+  | {
+      type: "discoveryProgress";
+      productId: ProductId;
+      phase: DiscoveryPhase;
+      node: DiscoveryNode;
+      /** Only present on the loadWindow node - what it actually loaded, not a placeholder. */
+      window?: { eventCount: number; contextDayCount: number };
+    }
   | { type: "discoveryReasoning"; productId: ProductId; attempt: number; reasoning: string; response: string }
   | { type: "skillDiscovered"; productId: ProductId; skill: SkillSummary };
 
