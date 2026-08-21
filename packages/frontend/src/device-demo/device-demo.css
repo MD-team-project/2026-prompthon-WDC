@@ -1,17 +1,9 @@
 /**
- * Dark "control room" look, deliberately distinct from the main app's light
- * paper theme - this screen sits next to it on a second monitor during a
- * demo, and needs to read as "engineering readout" rather than "character
- * screen". Per-product tint still comes from styles.css's [data-product]
- * tokens, so the accent colour stays the single source of truth.
+ * Same light, warm "game HUD" register as the main app (styles.css) - chunky
+ * ink-outlined panels, hard offset shadows instead of blur, per-product tint
+ * from [data-product]. This screen sits next to the main app during a demo,
+ * so it should read as the same product, not a separate dark dashboard.
  */
-
-body:has(.device-demo) {
-  background: #0b0d10;
-  color: #e7e9ec;
-  font-family: var(--font-latin);
-  min-height: 100vh;
-}
 
 .device-demo {
   max-width: 1200px;
@@ -24,10 +16,11 @@ body:has(.device-demo) {
   font-weight: 700;
   margin: 0 0 8px;
   font-family: var(--font-body);
+  color: var(--text);
 }
 
 .device-demo-head p {
-  color: #9aa0a8;
+  color: var(--text-dim);
   margin: 0 0 32px;
   font-size: 14px;
   max-width: 640px;
@@ -47,16 +40,18 @@ body:has(.device-demo) {
 }
 
 .device-panel {
-  background: #14171b;
-  border: 1px solid #262a30;
+  background: var(--surface);
+  border: 2.5px solid var(--ink);
   border-radius: var(--radius-lg);
+  box-shadow: 0 5px 0 var(--ink);
   padding: 20px;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 
 .device-panel-flash {
-  border-color: var(--product);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--product) 35%, transparent);
+  box-shadow:
+    0 5px 0 var(--ink),
+    0 0 0 4px color-mix(in srgb, var(--product) 45%, transparent);
 }
 
 .device-panel-head {
@@ -70,6 +65,7 @@ body:has(.device-demo) {
   width: 56px;
   height: 56px;
   border-radius: 12px;
+  border: 2px solid var(--ink-soft);
   background: var(--tint);
   display: flex;
   align-items: center;
@@ -103,36 +99,35 @@ body:has(.device-demo) {
   font-size: 17px;
   font-weight: 600;
   margin: 0;
-  color: #fff;
+  color: var(--text);
 }
 
 .device-panel-id {
   font-size: 11px;
-  color: #6b7178;
+  color: var(--text-mute);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .device-power-badge {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.05em;
-  padding: 4px 10px;
+  padding: 3px 10px;
   border-radius: 999px;
+  border: 1.5px solid var(--ink);
   flex-shrink: 0;
   transition: transform 0.2s ease;
 }
 
 .device-power-on {
-  background: rgba(90, 200, 130, 0.16);
-  color: #6fe0a0;
-  box-shadow: 0 0 0 1px rgba(111, 224, 160, 0.3) inset;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--product) 55%, #fff), var(--product));
+  color: #fff;
 }
 
 .device-power-off {
-  background: rgba(255, 255, 255, 0.06);
-  color: #7a8087;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  background: var(--surface-2);
+  color: var(--text-mute);
 }
 
 .device-power-flash {
@@ -145,7 +140,7 @@ body:has(.device-demo) {
 
 .device-panel-error,
 .device-panel-empty {
-  color: #6b7178;
+  color: var(--text-mute);
   font-size: 13px;
   margin: 8px 0;
 }
@@ -168,28 +163,28 @@ body:has(.device-demo) {
 
 .device-attr-row dt {
   font-size: 13px;
-  color: #9aa0a8;
+  color: var(--text-dim);
 }
 
 .device-attr-row dd {
   margin: 0;
   font-size: 14px;
-  font-weight: 600;
-  color: #e7e9ec;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .device-attr-changed {
-  background: color-mix(in srgb, var(--product) 22%, transparent);
+  background: var(--tint);
 }
 
 .device-attr-changed dd {
-  color: #fff;
+  color: var(--product-ink);
 }
 
 .device-panel-foot {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #262a30;
+  border-top: 1.5px solid var(--line);
   font-size: 11px;
-  color: #565b62;
+  color: var(--text-mute);
 }
