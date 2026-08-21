@@ -90,10 +90,10 @@ const deviceState: Record<string, DeviceStats> = {
  * makes the three recommendation stories rehearsable without a backend.
  */
 const CONTEXT_SCENARIOS = {
-  rain: { weather: "rain", temperatureC: 24, steps: 3_280, distanceKm: 2.4, screenTimeMinutes: 194 },
-  walk: { weather: "clear", temperatureC: 27, steps: 14_260, distanceKm: 10.4, screenTimeMinutes: 62 },
-  screen: { weather: "cloudy", temperatureC: 22, steps: 4_150, distanceKm: 3.0, screenTimeMinutes: 268 },
-  clear: { weather: "clear", temperatureC: 26, steps: 6_900, distanceKm: 5.0, screenTimeMinutes: 88 },
+  rain: { weather: "rain", temperatureC: 19, steps: 900, distanceKm: 0.7, screenTimeMinutes: 95 },
+  walk: { weather: "clear", temperatureC: 29, steps: 19_000, distanceKm: 13.9, screenTimeMinutes: 25 },
+  screen: { weather: "cloudy", temperatureC: 21, steps: 500, distanceKm: 0.4, screenTimeMinutes: 340 },
+  clear: { weather: "clear", temperatureC: 25, steps: 6_000, distanceKm: 4.4, screenTimeMinutes: 80 },
 } as const satisfies Record<string, Omit<DailyContextStats, "observedAt">>;
 
 type ContextScenario = keyof typeof CONTEXT_SCENARIOS;

@@ -38,12 +38,15 @@ const km = (steps: number) => Math.round((steps / STEPS_PER_KM) * 10) / 10;
 /**
  * The demo levers. Each preset makes exactly ONE recommendation obviously
  * correct, so a rehearsal can pick which of the three stories to tell without
- * editing code:
+ * editing code. Each signal is pushed to a dramatic extreme on ONE preset and
+ * kept ordinary everywhere else, so no two presets can be read as the same
+ * story (a previous version had `rain` and `screen` both showing an elevated
+ * screen time, which blurred the two together):
  *
- *   rain    wet, barely moved, on the phone a lot  -> neck / upper back
- *   walk    clear, walked a long way               -> legs and feet
- *   screen  indoors, very high phone time          -> neck / upper back
- *   clear   an unremarkable day                    -> nothing stands out
+ *   rain    wet, barely moved, ordinary screen time  -> lower back (weather alone is the trigger)
+ *   walk    clear, walked a long way, phone untouched -> legs and feet
+ *   screen  neutral weather, barely moved, phone nearly all day -> neck
+ *   clear   an unremarkable day                       -> nothing stands out
  *
  * `clear` is deliberately included: a character that finds a reason to
  * recommend something every single day is not reading context, it is just
@@ -53,10 +56,10 @@ export const CONTEXT_SCENARIOS = ["rain", "walk", "screen", "clear"] as const;
 export type ContextScenario = (typeof CONTEXT_SCENARIOS)[number];
 
 const SCENARIOS: Record<ContextScenario, Reading> = {
-  rain: { weather: "rain", temperatureC: 24, steps: 3_280, distanceKm: km(3_280), screenTimeMinutes: 194 },
-  walk: { weather: "clear", temperatureC: 27, steps: 14_260, distanceKm: km(14_260), screenTimeMinutes: 62 },
-  screen: { weather: "cloudy", temperatureC: 22, steps: 4_150, distanceKm: km(4_150), screenTimeMinutes: 268 },
-  clear: { weather: "clear", temperatureC: 26, steps: 6_900, distanceKm: km(6_900), screenTimeMinutes: 88 },
+  rain: { weather: "rain", temperatureC: 19, steps: 900, distanceKm: km(900), screenTimeMinutes: 95 },
+  walk: { weather: "clear", temperatureC: 29, steps: 19_000, distanceKm: km(19_000), screenTimeMinutes: 25 },
+  screen: { weather: "cloudy", temperatureC: 21, steps: 500, distanceKm: km(500), screenTimeMinutes: 340 },
+  clear: { weather: "clear", temperatureC: 25, steps: 6_000, distanceKm: km(6_000), screenTimeMinutes: 80 },
 };
 
 function isScenario(value: string): value is ContextScenario {
