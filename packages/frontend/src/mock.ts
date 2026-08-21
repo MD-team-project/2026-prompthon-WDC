@@ -308,6 +308,12 @@ export function createMockClient(getLang: GetLang): ApiClient {
       return currentContext();
     },
 
+    async setContextScenario(scenario) {
+      await wait(LATENCY_MS);
+      contextScenario = scenario in CONTEXT_SCENARIOS ? scenario : "rain";
+      return currentContext();
+    },
+
     async listSkills(characterId) {
       await wait(LATENCY_MS);
       return structuredClone(skills[characterId] ?? []);

@@ -49,6 +49,7 @@ import type {
   Skill,
 } from '@prompthon/shared';
 // `neighbourId` is gone with swipe navigation - switching is switcher-only now.
+import type { ContextScenario } from '../api';
 import { progressRatio } from '../pure';
 import type { MicStatus } from '../state';
 import { productLabel, weatherGlyph, type translator } from '../strings';
@@ -97,6 +98,14 @@ interface Props {
   onLevelUpDone: () => void;
   onDiscoveryDone: () => void;
   onLevelUpTrigger: () => void;
+  /**
+   * Demo lever, not a device control - FE-R-7 is about DEVICE state (the
+   * massage chair's settings etc.); today's weather/steps/screen-time is app
+   * context the character reads, never something it or the device holds. A
+   * rehearsal picking which story today tells is not the user operating the
+   * appliance.
+   */
+  onSetScenario: (scenario: ContextScenario) => void;
 }
 
 export function CharacterView(props: Props) {
@@ -384,6 +393,7 @@ export function CharacterView(props: Props) {
           lang={props.lang}
           t={t}
           onClose={() => setContextOpen(false)}
+          onSetScenario={props.onSetScenario}
         />
       ) : null}
     </div>

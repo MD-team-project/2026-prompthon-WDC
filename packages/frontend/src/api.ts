@@ -56,6 +56,9 @@ import type {
 import { CHARACTER_DEFAULTS } from './characters';
 import { createMockClient } from './mock';
 
+/** device-stub's demo presets (`dailyContext.ts`) - mirrored here, not fetched, since the set is fixed. */
+export type ContextScenario = 'rain' | 'walk' | 'screen' | 'clear';
+
 export interface ApiClient {
   listCharacters(): Promise<Character[]>;
   /** `null` when there is nothing to report yet - see the class-level note. */
@@ -66,6 +69,8 @@ export interface ApiClient {
    * `/api/context/today`, outside the per-product routes, for that reason.
    */
   getTodayContext(): Promise<DailyContextStats>;
+  /** Demo lever - swaps today's whole reading to one of device-stub's presets. */
+  setContextScenario(scenario: ContextScenario): Promise<DailyContextStats>;
   listSkills(characterId: string): Promise<Skill[]>;
   /** `onToken` fires with each chunk of the reply as BE streams it, before the returned promise settles. */
   sendMessage(
@@ -305,6 +310,15 @@ function createHttpClient(getLang: GetLang): ApiClient {
 
     async getTodayContext() {
       return toDailyContext(await unwrap<BeDailyContext>(await fetch('/api/context/today')));
+    },
+
+    async setContextScenario(scenario) {
+      const response = await fetch('/api/context/today', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario }),
+      });
+      return toDailyContext(await unwrap<BeDailyContext>(response));
     },
 
     async listSkills(characterId) {

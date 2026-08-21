@@ -1356,6 +1356,13 @@ svg {
   padding-top: 2px;
 }
 
+.context-scenario-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .context-widget {
   display: flex;
   flex-direction: column;

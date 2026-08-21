@@ -45,4 +45,13 @@ export const deviceAdapter = {
   getDailyContext(): Promise<DailyContext> {
     return request<DailyContext>("/context/today");
   },
+
+  /** Demo lever - swaps device-stub's whole preset (`rain`/`walk`/`screen`/`clear`). */
+  setContextScenario(scenario: string): Promise<DailyContext> {
+    return request<DailyContext>("/context/today", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario }),
+    });
+  },
 };

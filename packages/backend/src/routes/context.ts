@@ -25,3 +25,24 @@ contextRouter.get("/api/context/today", async (_req, res) => {
     });
   }
 });
+
+/**
+ * Demo lever, exposed to FE - swap today's whole reading to one of
+ * device-stub's presets (`rain`/`walk`/`screen`/`clear`), so a rehearsal or
+ * live demo can pick which story to tell without touching device-stub
+ * directly. Same pass-through/failure shape as the GET above.
+ */
+contextRouter.post("/api/context/today", async (req, res) => {
+  const { scenario } = (req.body ?? {}) as { scenario?: unknown };
+  if (typeof scenario !== "string") {
+    res.status(400).json({ failure: { code: "INVALID_REQUEST", message: "scenario must be a string" } });
+    return;
+  }
+  try {
+    res.json(await deviceAdapter.setContextScenario(scenario));
+  } catch (err) {
+    res.status(502).json({
+      failure: { code: "DEVICE_UNREACHABLE", message: (err as Error).message },
+    });
+  }
+});
