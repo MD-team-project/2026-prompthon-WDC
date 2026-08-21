@@ -1,6 +1,7 @@
 # Execution Plan
 
 **Stage**: INCEPTION - Workflow Planning
+**Status**: **COMPLETE** - plan approved 2026-08-20T04:26:14Z (revision 5) and fully executed. Every stage it scheduled has closed; see section 3. Closed out 2026-08-21T01:45:00Z.
 **Created**: 2026-08-20T03:31:18Z
 **Revised**: 2026-08-20T03:42:55Z - revision 2, restructured for a 3-person parallel team (Infra / BE / FE)
 **Project**: prompthon - AI-characterized companion layer over LG products
@@ -84,22 +85,22 @@ flowchart TD
         RE["Reverse Engineering<br/><b>SKIPPED</b>"]
         RA["Requirements Analysis<br/><b>COMPLETED</b>"]
         US["User Stories<br/><b>COMPLETED</b>"]
-        WP["Workflow Planning<br/><b>IN PROGRESS</b>"]
-        AD["Application Design<br/>components and contracts<br/><b>EXECUTE</b>"]
-        UG["Units Generation<br/>3 units<br/><b>EXECUTE</b>"]
+        WP["Workflow Planning<br/><b>COMPLETED</b>"]
+        AD["Application Design<br/>components and contracts<br/><b>COMPLETED</b>"]
+        UG["Units Generation<br/>3 units<br/><b>COMPLETED</b>"]
     end
 
     subgraph CONSTRUCTION["CONSTRUCTION PHASE"]
-        FDI["Functional Design<br/>Unit INFRA<br/><b>EXECUTE</b>"]
-        FDB["Functional Design<br/>Unit BE<br/><b>EXECUTE</b>"]
-        FDF["Functional Design<br/>Unit FE<br/><b>EXECUTE</b>"]
-        CGI["Code Generation<br/>Unit INFRA<br/><b>EXECUTE</b>"]
-        CGB["Code Generation<br/>Unit BE<br/><b>EXECUTE</b>"]
-        CGF["Code Generation<br/>Unit FE<br/><b>EXECUTE</b>"]
+        FDI["Functional Design<br/>Unit INFRA<br/><b>COMPLETED</b>"]
+        FDB["Functional Design<br/>Unit BE<br/><b>COMPLETED</b>"]
+        FDF["Functional Design<br/>Unit FE<br/><b>COMPLETED</b>"]
+        CGI["Code Generation<br/>Unit INFRA<br/><b>COMPLETED</b>"]
+        CGB["Code Generation<br/>Unit BE<br/><b>COMPLETED</b>"]
+        CGF["Code Generation<br/>Unit FE<br/><b>COMPLETED</b>"]
         NFRA["NFR Requirements<br/><b>SKIP</b>"]
         NFRD["NFR Design<br/><b>SKIP</b>"]
         ID["Infrastructure Design<br/><b>SKIP</b>"]
-        BT["Build and Test<br/>integration<br/><b>EXECUTE</b>"]
+        BT["Build and Test<br/>integration<br/><b>COMPLETED</b>"]
     end
 
     subgraph OPERATIONS["OPERATIONS PHASE"]
@@ -128,11 +129,11 @@ flowchart TD
     style US fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style WP fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style BT fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
-    style AD fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style UG fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style FDI fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style FDB fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style FDF fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
+    style AD fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    style UG fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    style FDI fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    style FDB fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    style FDF fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style CGI fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style CGB fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style CGF fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
@@ -155,9 +156,9 @@ INCEPTION PHASE
   Reverse Engineering ......... SKIPPED   (greenfield)
   Requirements Analysis ....... COMPLETED (approved, merged via PR #4)
   User Stories ................ COMPLETED (9 stories, 2 personas, rev 4)
-  Workflow Planning ........... IN PROGRESS
-  Application Design .......... EXECUTE   (3 components, 2 contracts)  <-- changed
-  Units Generation ............ EXECUTE   (3 units)                    <-- changed
+  Workflow Planning ........... COMPLETED (approved, rev 5)
+  Application Design .......... COMPLETED (3 components, 2 contracts)  <-- changed
+  Units Generation ............ COMPLETED (3 units)                    <-- changed
 
 CONSTRUCTION PHASE  (three parallel streams)
   NFR Requirements ............ SKIP
@@ -165,18 +166,18 @@ CONSTRUCTION PHASE  (three parallel streams)
   Infrastructure Design ....... SKIP
 
   ---- joint, before the split ----
-  Application Design + Units Generation: contracts frozen
+  Application Design + Units Generation: contracts frozen  COMPLETED
 
   ---- parallel from here ----
-  Stream INFRA : Functional Design -> Code Generation
-  Stream BE    : Functional Design -> Code Generation
-  Stream FE    : Functional Design -> Code Generation
+  Stream INFRA : Functional Design -> Code Generation      COMPLETED
+  Stream BE    : Functional Design -> Code Generation      COMPLETED
+  Stream FE    : Functional Design -> Code Generation      COMPLETED
 
   ---- rejoin ----
-  Build and Test .............. EXECUTE   (integration is the real work here)
+  Build and Test .............. COMPLETED (integration was the real work here)
 
 OPERATIONS PHASE
-  Operations .................. PLACEHOLDER
+  Operations .................. PLACEHOLDER (closed as out of scope)
 ```
 
 ---
@@ -189,32 +190,33 @@ OPERATIONS PHASE
 - [x] Reverse Engineering - **SKIPPED** - greenfield, nothing to analyse
 - [x] Requirements Analysis - **COMPLETED** - approved, merged via PR #4, revised four times since
 - [x] User Stories - **COMPLETED** - 9 stories, 2 personas, four revisions
-- [x] Workflow Planning - **IN PROGRESS**
-- [ ] Application Design - **EXECUTE** *(changed from SKIP in revision 1)*
+- [x] Workflow Planning - **COMPLETED** - approved 2026-08-20T04:26:14Z, revision 5
+- [x] Application Design - **COMPLETED** - approved 2026-08-20T07:34:07Z *(changed from SKIP in revision 1)*
   - **Rationale**: Two independent reasons, either sufficient. First, `units-generation.md` lists Application Design as a **required prerequisite** of Units Generation, so executing units without it is not available. Second, and more substantively, this is now the stage that produces the artifact the parallelism depends on: component boundaries and the two interface contracts. With three people about to work simultaneously, a wrong or vague contract is the most expensive mistake on the table, and it is cheapest to prevent here.
   - **Scope discipline**: capped at **3 top-level components**. The YAGNI guidance asks for an explicit flag above 3-4 components for an MVP; three is the floor the two mandated interfaces already impose, so no further decomposition is permitted. No separate services for discovery, progression, or skill storage - those are modules inside BE.
-- [ ] Units Generation - **EXECUTE**
+- [x] Units Generation - **COMPLETED** - approved 2026-08-20T07:41:33Z, 3 units: INFRA, BE, FE
   - **Rationale**: Produces the three unit definitions, the dependency matrix, and the story map. The dependency matrix matters more than usual here: it is what tells each owner what they may assume and what they must stub.
 
 ### CONSTRUCTION PHASE
 
 Runs as **three parallel streams**, not a sequential loop.
 
-- [ ] Functional Design - **EXECUTE**, three times, in parallel
+- [x] Functional Design - **COMPLETED**, three times, in parallel. INFRA approved 2026-08-20T09:07:10Z, BE 2026-08-20T09:41:52Z, FE 2026-08-20T08:45:00Z
   - **Rationale**: Retained by the user's Round 2 Q6 = B decision and now additionally load-bearing: each owner designs against the frozen contracts, so each design can proceed without waiting. The BE design carries the heaviest content - skill representation, trigger vocabulary, provenance, revision semantics, graph state shape - plus the four decisions deferred from `requirements.md`.
-- [ ] NFR Requirements - **SKIP**
+- [x] NFR Requirements - **SKIP** - decision held for all three units, nothing outstanding
   - **Rationale**: Nothing left to determine. The 10 lite NFRs are fixed and numbered, both baselines disabled, stack settled.
-- [ ] NFR Design - **SKIP**
+- [x] NFR Design - **SKIP** - decision held for all three units
   - **Rationale**: Conditional on a skipped stage. The NFRs in scope are a timeout, a retry, a fallback message and an input cap - none needs a design pass.
-- [ ] Infrastructure Design - **SKIP**
+- [x] Infrastructure Design - **SKIP** - decision held. The INFRA *stream* delivered its IaC and deployment inside unit-level Functional Design and Code Generation, as this rationale anticipated
   - **Rationale**: Worth pausing on, since there is now a person named Infra. The stage is still skipped: the committed build runs locally, deployment is conditional on time remaining, and NFR-5.2 already states the only requirement that applies if it happens. The Infra **stream** has substantial work - AWS resources, the device API service, fixture generation - but that work is unit-level design and code, not a separate infrastructure design stage for a deployment that may not occur.
-- [ ] Code Generation - **EXECUTE**, three times, in parallel
-- [ ] Build and Test - **EXECUTE**, once, after all three streams
+- [x] Code Generation - **COMPLETED**, three times, in parallel. INFRA approved 2026-08-20T11:40:00Z, BE 2026-08-20T14:45:00Z, FE 2026-08-20T22:15:00Z
+- [x] Build and Test - **COMPLETED**, once, after all three streams. Approved 2026-08-21T01:40:00Z. Instructions at `aidlc-docs/construction/build-and-test/`
   - **Rationale**: This is where the plan's top risk lands. Integration between the three units is the substance of this stage, not a formality appended to it.
+  - **Outcome**: the risk was real and it landed where predicted. The two integration defects both sat at seams rather than inside a unit - the DynamoDB key schema (`pk`/`sk` against BE's `id`, caught 2026-08-20T12:10:00Z) and the `engines.node` floor. Neither was visible from inside the unit that caused it.
 
 ### OPERATIONS PHASE
 
-- [ ] Operations - **PLACEHOLDER**
+- [x] Operations - **PLACEHOLDER** - closed 2026-08-21T01:45:00Z as out of scope. Nothing to execute: the framework stage carries no content and this project's deployment target dies with the AWS account
 
 ---
 

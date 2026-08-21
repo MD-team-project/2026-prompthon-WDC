@@ -3,7 +3,7 @@
 **Stage**: CONSTRUCTION - Functional Design, unit BE
 **Created**: 2026-08-20T07:52:18Z
 **Branch**: `construction/be`
-**Status**: Awaiting answers to the 7 questions in section 3
+**Status**: **COMPLETE and APPROVED 2026-08-20T09:41:52Z.** Section 2A redirected the stage from domain questions to structural ones; S1-S7 in section 4A are the decisions that closed it. Q5, Q6 and Q7 are **parked, not withdrawn** - they get decided against real code. Section 4 checklist fully executed; artifacts at `aidlc-docs/construction/be/functional-design/`.
 
 ---
 
@@ -234,18 +234,25 @@ X) Other
 
 ## 4. Execution checklist
 
-Runs after this plan is approved. Nothing started.
+**Executed and closed 2026-08-20T09:41:52Z.**
 
-- [ ] Confirm answers and resolve any ambiguity
-- [ ] Generate `be/functional-design/domain-entities.md` - entities, relationships, lifecycle states
-- [ ] Generate `be/functional-design/business-logic-model.md` - discovery pipeline, control flow, revision flow, progression flow
-- [ ] Generate `be/functional-design/business-rules.md` - validation, invariants, thresholds, failure rules
-- [ ] Verify every BE-primary story maps to rules that make it testable
-- [ ] Verify the FR-5.5 and FR-5.11 invariants appear as explicit rules, not assumptions
-- [ ] Record what remains deferred to the per-product phase
-- [ ] Mark checklist items complete, update `aidlc-state.md`, log in `audit.md`
+- [x] Confirm answers and resolve any ambiguity
+- [x] Generate `be/functional-design/domain-entities.md` - entities, relationships, lifecycle states
+- [x] Generate `be/functional-design/business-logic-model.md` - discovery pipeline, control flow, revision flow, progression flow
+- [x] Generate `be/functional-design/business-rules.md` - validation, invariants, thresholds, failure rules
+- [x] Verify every BE-primary story maps to rules that make it testable
+- [x] Verify the FR-5.5 and FR-5.11 invariants appear as explicit rules, not assumptions
+- [x] Record what remains deferred to the per-product phase
+- [x] Mark checklist items complete, update `aidlc-state.md`, log in `audit.md`
 
 No frontend-components artifact - BE has no UI.
+
+**What the artifacts came out looking like, given section 2A.** The redirect to structural questions means the three documents are **deliberately thin on domain behaviour**. They record four entities, three of which are almost data-free, and they state each omission with its cost rather than leaving it implied. The two decisions that make them thin are the two most expensive guesses that were available at this point and were declined:
+
+- a skill is a **Markdown document**, not a structured rule - no trigger DSL, no condition tree
+- there is **no progression state in BE at all** - FE derives level from the skill list
+
+`business-rules.md` carries 24 numbered rules and a four-item testable-properties section, so the BE-primary stories are testable even though the behaviour behind them is parked. It also carries a **delta section appended at Code Generation close-out** recording where the built code diverged from the design - notably that `status`-based retirement was replaced by hard delete, and that the four property-based tests in scope were never written.
 
 ## 5. Note on the first-hour verification
 

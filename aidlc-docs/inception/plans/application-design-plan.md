@@ -2,7 +2,7 @@
 
 **Stage**: INCEPTION - Application Design
 **Created**: 2026-08-20T04:26:14Z
-**Status**: Awaiting answers to the 8 questions in section 3
+**Status**: **COMPLETE and APPROVED 2026-08-20T07:34:07Z.** All 8 questions in section 3 answered; every checklist step in section 4 executed. Read section 4a - four generated artifacts were deliberately discarded before approval and the stage outcome was collapsed into a single short `application-design.md`.
 **Inputs**: `requirements.md` (rev 5), `stories.md` (rev 4), `execution-plan.md` (rev 5)
 
 ---
@@ -601,48 +601,70 @@ X) Other
 
 ## 4. Execution checklist
 
-To run after this plan is approved. Nothing started yet.
+**Executed and closed 2026-08-20T07:34:07Z.** Every step below ran. Read section 4a before reading the checkmarks: four of the artifacts this checklist names were generated and then **deliberately discarded**, so a `[x]` here means the step was carried out, not that its file still exists.
 
 ### Preparation
-- [ ] Confirm answers to all 8 questions and resolve any ambiguity
-- [ ] Re-read `requirements.md` FR-5.1 through FR-5.7 and confirm no design decision contradicts them
+- [x] Confirm answers to all 8 questions and resolve any ambiguity
+- [x] Re-read `requirements.md` FR-5.1 through FR-5.7 and confirm no design decision contradicts them
 
 ### Components
-- [ ] Generate `application-design/components.md` - 3 top-level components with purpose, responsibilities, interfaces
-- [ ] Record the explicit component-count justification, since the cap is a stated constraint
-- [ ] Name backend modules per the Question 6 answer
+- [x] Generate `application-design/components.md` - 3 top-level components with purpose, responsibilities, interfaces
+- [x] Record the explicit component-count justification, since the cap is a stated constraint
+- [x] Name backend modules per the Question 6 answer
 
 ### Interfaces and methods
-- [ ] Generate `application-design/component-methods.md` - method signatures with input and output types, no business rules
-- [ ] Include the `DeviceAdapter` interface and the device API route shapes, since the stub is a handoff artifact at hour 4
-- [ ] Include the application API surface: chat, announcements, stats, skill list, invoke, feedback, audio
-- [ ] Include shared type definitions: Character, DeviceState, Skill, Trigger, Provenance, Level, UsageEvent
+- [x] Generate `application-design/component-methods.md` - method signatures with input and output types, no business rules
+- [x] Include the `DeviceAdapter` interface and the device API route shapes, since the stub is a handoff artifact at hour 4
+- [x] Include the application API surface: chat, announcements, stats, skill list, invoke, feedback, audio
+- [x] Include shared type definitions: Character, DeviceState, Skill, Trigger, Provenance, Level, UsageEvent
 
 ### Services
-- [ ] Generate `application-design/services.md` - service definitions, responsibilities, orchestration per the Question 8 answer
-- [ ] Specify how a discovery run is initiated per the Question 4 answer
+- [x] Generate `application-design/services.md` - service definitions, responsibilities, orchestration per the Question 8 answer
+- [x] Specify how a discovery run is initiated per the Question 4 answer
 
 ### Dependencies
-- [ ] Generate `application-design/component-dependency.md` - dependency matrix, communication patterns
-- [ ] Document both data flows: runtime device-to-agent-to-UI, and accumulation device-to-DynamoDB
-- [ ] Mark which dependencies are stubbed during parallel work and by whom
+- [x] Generate `application-design/component-dependency.md` - dependency matrix, communication patterns
+- [x] Document both data flows: runtime device-to-agent-to-UI, and accumulation device-to-DynamoDB
+- [x] Mark which dependencies are stubbed during parallel work and by whom
 
 ### Contracts for the parallel split
-- [ ] DynamoDB schema: tables and keys for usage events (primary), character state, skills with provenance and revisions, feedback log
-- [ ] Application API contract, including the announcement transport chosen in Question 3
-- [ ] Environment contract: `.env` shape, resource names, run commands
-- [ ] Confirm the hour-4 handoff surface for the device stub is fully specified
+- [x] DynamoDB schema: tables and keys for usage events (primary), character state, skills with provenance and revisions, feedback log
+- [x] Application API contract, including the announcement transport chosen in Question 3
+- [x] Environment contract: `.env` shape, resource names, run commands
+- [x] Confirm the hour-4 handoff surface for the device stub is fully specified
 
 ### Consolidation and validation
-- [ ] Generate `application-design/application-design.md` consolidating the above
-- [ ] Verify every FR in `requirements.md` maps to a component that owns it
-- [ ] Verify no component exceeds the 3-component cap and no speculative component exists
-- [ ] Validate content per `common/content-validation.md` before writing
+- [x] Generate `application-design/application-design.md` consolidating the above
+- [x] Verify every FR in `requirements.md` maps to a component that owns it
+- [x] Verify no component exceeds the 3-component cap and no speculative component exists
+- [x] Validate content per `common/content-validation.md` before writing
 
 ### Close-out
-- [ ] Mark each step `[x]`
-- [ ] Update `aidlc-state.md`
-- [ ] Log completion in `audit.md`
+- [x] Mark each step `[x]`
+- [x] Update `aidlc-state.md`
+- [x] Log completion in `audit.md`
+
+---
+
+## 4a. What the stage actually produced, and what it threw away
+
+**Decided 2026-08-20T07:14:09Z, by user decision, before stage approval.** The detailed interface contract was generated as planned and then **discarded**. `components.md`, `component-methods.md`, `services.md` and `component-dependency.md` were removed. The surviving artifact is a single short `application-design.md`, plus `be-reference-discovery-workflow.md` kept as BE's non-binding notes, plus the three Units Generation files.
+
+**Why.** Writing method signatures, payload shapes and a storage schema in Inception means guessing before any of the three units has written a line of code, and every guess costs a renegotiation to correct. Three of the four discarded files were guesses of exactly that kind.
+
+**What replaced them** is the interface evolution policy: **fix the transport only, evolve everything above it.** Fixed at Inception - REST for user-initiated FE-to-BE, SSE for server-initiated BE-to-FE, HTTP JSON for BE-to-`device-stub`, canned responses in `device-stub`. Not fixed - route paths, payload shapes, SSE event names, storage schema and keys, error shapes. Those get settled by FE and BE directly during Construction.
+
+**The three contract steps above were therefore satisfied at a coarser grain than written:**
+
+| Checklist step | How it actually closed |
+|---|---|
+| DynamoDB schema | **Deferred to Construction and settled there.** INFRA created a single table with partition key `id` and no sort key. The Inception-era guess would have been wrong: it assumed usage events were the primary persisted entity, and BE later deferred them to memory, leaving skills as the only stored record |
+| Application API contract | **Deferred.** Settled incrementally between BE and FE; the artifact of record is `construction/be/code/api-examples.md` - unedited captures from a running backend rather than described shapes |
+| Environment contract | **Reassigned to INFRA**, delivered as `construction/infra/code/runtime-contract.md` with the deployed resource names in it rather than placeholders |
+
+**Retrospective judgement: the discard was correct.** The one Inception-fixed decision that held unchanged through Construction was the transport choice. Every payload-level decision moved at least once. The DynamoDB key schema moved after BE's code existed, which is precisely the renegotiation this policy was adopted to avoid paying twice.
+
+**One thing the coarser grain cost.** The announcement transport (Question 3) was left open, and BE and FE settled it during Construction as **FE polling the skill list** rather than an SSE push. That kept SSE to Agentic Control only with no exception carved out, and kept the announcement unprompted per FR-3.6. It also introduced poll-interval latency that a contract fixed here would have surfaced earlier. Recorded as a real cost, not a hidden one.
 
 ---
 

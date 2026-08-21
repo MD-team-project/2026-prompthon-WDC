@@ -3,10 +3,10 @@
 ## Status
 
 - **Unit**: INFRA
-- **Stage**: Functional Design approved
+- **Stage**: Functional Design **COMPLETE and approved**
 - **Document language**: English
 - **Approval timestamp**: 2026-08-20T09:07:10Z
-- **Next gate**: Start Code Generation Part 1 planning in a new session; no code is generated before plan approval.
+- **Next gate**: cleared. Code Generation planned, approved 2026-08-20T10:12:00Z, executed, and the stage approved 2026-08-20T11:40:00Z with the stack deployed and verified against the live account. INFRA unit **COMPLETE**.
 
 ## Scope
 
