@@ -1,0 +1,6 @@
+# 빌드 산출물
+dist/
+
+# pull-characters.mjs 가 packages/frontend/public/characters/ 에서 복사해 오는 것.
+# 원본이 이미 저장소에 있으므로 중복 커밋하지 않는다.
+assets/characters/
