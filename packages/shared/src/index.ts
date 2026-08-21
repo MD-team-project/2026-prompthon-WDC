@@ -168,6 +168,9 @@ export interface Failure {
 
 export type DiscoveryPhase = "started" | "analysing" | "found" | "noPattern";
 
+/** The discovery graph's actual nodes (discovery/graph.ts), in run order. */
+export type DiscoveryNode = "loadWindow" | "findPattern" | "save";
+
 /**
  * SSE carries Agentic Control output (per-chat-turn stream) plus Skill
  * Discovery progress and results (persistent per-product subscription,
@@ -177,7 +180,7 @@ export type ControlEvent =
   | { type: "token"; text: string }
   | { type: "deviceState"; state: DeviceState }
   | { type: "done"; reply: AgentReply }
-  | { type: "discoveryProgress"; productId: ProductId; phase: DiscoveryPhase }
+  | { type: "discoveryProgress"; productId: ProductId; phase: DiscoveryPhase; node: DiscoveryNode }
   | { type: "discoveryReasoning"; productId: ProductId; attempt: number; reasoning: string; response: string }
   | { type: "skillDiscovered"; productId: ProductId; skill: SkillSummary };
 
