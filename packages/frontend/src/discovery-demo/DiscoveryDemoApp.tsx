@@ -103,51 +103,55 @@ function useMergedDiscoveryFeed(): RunState {
   const [state, setState] = useState<RunState>(INITIAL);
 
   useEffect(() => {
-    const products: ProductId[] = ['massagechair', 'shoecase', 'pral'];
-    const sources = products.map((productId) => {
-      const source = new EventSource(`/api/characters/${productId}/events`);
-      source.onmessage = (ev) => {
-        let parsed: ControlEvent;
-        try {
-          parsed = JSON.parse(ev.data) as ControlEvent;
-        } catch {
-          return;
-        }
+    // ONE connection covering all three products (BE's /api/events), not
+    // three per-product ones - this page sitting open in its own tab
+    // alongside the main app (which already holds 3 of its own) would
+    // otherwise push the same origin past Chrome's 6-connections-per-origin
+    // cap under HTTP/1.1, which starves every other request on that origin,
+    // including the main app's actual /chat POST. Every ControlEvent already
+    // carries `productId`, so telling products apart doesn't need a
+    // connection each.
+    const source = new EventSource('/api/events');
+    source.onmessage = (ev) => {
+      let parsed: ControlEvent;
+      try {
+        parsed = JSON.parse(ev.data) as ControlEvent;
+      } catch {
+        return;
+      }
 
-        if (parsed.type === 'discoveryProgress') {
-          setState((s) => {
-            // A fresh run always starts at loadWindow - that's the signal to
-            // take over the diagram, even mid-way through a previous run.
-            if (parsed.node === 'loadWindow') {
-              return {
-                productId: parsed.productId,
-                node: parsed.node,
-                phase: parsed.phase,
-                window: parsed.window ?? null,
-                attempts: [],
-                skill: null,
-                runKey: s.runKey + 1,
-              };
-            }
-            // Otherwise only follow the run currently owning the diagram -
-            // a late event from a run that already lost focus is ignored.
-            if (s.productId !== parsed.productId) return s;
-            return { ...s, node: parsed.node, phase: parsed.phase };
-          });
-        } else if (parsed.type === 'discoveryReasoning') {
-          setState((s) =>
-            s.productId === parsed.productId
-              ? { ...s, attempts: [...s.attempts, { attempt: parsed.attempt, reasoning: parsed.reasoning, response: parsed.response }] }
-              : s,
-          );
-        } else if (parsed.type === 'skillDiscovered') {
-          setState((s) => (s.productId === parsed.productId ? { ...s, skill: parsed.skill } : s));
-        }
-      };
-      return source;
-    });
+      if (parsed.type === 'discoveryProgress') {
+        setState((s) => {
+          // A fresh run always starts at loadWindow - that's the signal to
+          // take over the diagram, even mid-way through a previous run.
+          if (parsed.node === 'loadWindow') {
+            return {
+              productId: parsed.productId,
+              node: parsed.node,
+              phase: parsed.phase,
+              window: parsed.window ?? null,
+              attempts: [],
+              skill: null,
+              runKey: s.runKey + 1,
+            };
+          }
+          // Otherwise only follow the run currently owning the diagram -
+          // a late event from a run that already lost focus is ignored.
+          if (s.productId !== parsed.productId) return s;
+          return { ...s, node: parsed.node, phase: parsed.phase };
+        });
+      } else if (parsed.type === 'discoveryReasoning') {
+        setState((s) =>
+          s.productId === parsed.productId
+            ? { ...s, attempts: [...s.attempts, { attempt: parsed.attempt, reasoning: parsed.reasoning, response: parsed.response }] }
+            : s,
+        );
+      } else if (parsed.type === 'skillDiscovered') {
+        setState((s) => (s.productId === parsed.productId ? { ...s, skill: parsed.skill } : s));
+      }
+    };
 
-    return () => sources.forEach((s) => s.close());
+    return () => source.close();
   }, []);
 
   return state;

@@ -10,6 +10,7 @@ import { pralRouter } from "./routes/pral.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
 import { contextRouter } from "./routes/context.js";
+import { allEventsRouter } from "./routes/sse.js";
 import { seedContext } from "./data/appContext.js";
 
 const app = express();
@@ -26,6 +27,7 @@ app.use("/api/characters/pral", pralRouter);
 app.use(contextRouter);
 app.use(internalRouter);
 app.use(healthRouter);
+app.use(allEventsRouter);
 
 /**
  * PAST DAYS of app-level context (weather, steps, distance, screen time).
