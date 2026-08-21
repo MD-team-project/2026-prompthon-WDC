@@ -62,6 +62,12 @@ import type { translator } from '../strings';
 /** No frame-driven sequence has a natural "done" any more (see the note above), so every product - massagechair included - clears `levelUp` on this timer. Long enough that an SSE announcement typically lands mid-effect. */
 const LEVEL_UP_MS = 1500;
 
+const LEVEL_UP_SOUND_SRC = '/sounds/level-up.mp3';
+const SKILL_UNLOCK_SOUND_SRC = '/sounds/skill-unlock.mp3';
+const LEVEL_UP_VOLUME = 1;
+/** skill-unlock.mp3 is mastered louder than level-up.mp3 - scaled down to sound roughly the same size. */
+const SKILL_UNLOCK_VOLUME = 0.35;
+
 /**
  * `pral` and `shoecase` have no discovery reaction to play, but `discovery`
  * still needs to clear itself so the spotlight toast (gated on it, in
@@ -157,9 +163,19 @@ export function CharacterStage({
   // version of this.
   useEffect(() => {
     if (!levelUp) return;
+    const sound = new Audio(LEVEL_UP_SOUND_SRC);
+    sound.volume = LEVEL_UP_VOLUME;
+    void sound.play().catch(() => {});
     const timer = setTimeout(() => onLevelUpDoneRef.current(), LEVEL_UP_MS);
     return () => clearTimeout(timer);
   }, [levelUp]);
+
+  useEffect(() => {
+    if (!discovery) return;
+    const sound = new Audio(SKILL_UNLOCK_SOUND_SRC);
+    sound.volume = SKILL_UNLOCK_VOLUME;
+    void sound.play().catch(() => {});
+  }, [discovery]);
 
   const [surpriseFrame, setSurpriseFrame] = useState(0);
 

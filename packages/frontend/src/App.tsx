@@ -37,6 +37,9 @@ import { CharacterView } from './components/CharacterView';
 
 const LANG_KEY = 'prompthon.lang';
 
+const BGM_SRC = '/sounds/background.mp3';
+const BGM_VOLUME = 0.15;
+
 /** The one thing FE persists. NFR-2.3 leaves nothing else to the client. */
 function readLang(): Lang {
   try {
@@ -69,6 +72,32 @@ export function App() {
       // Not being able to remember the choice is not worth failing over.
     }
   }, [state.lang]);
+
+  // Quiet, looping background music. Browsers block autoplay-with-sound until
+  // a user gesture, so a blocked `play()` is retried on the first pointer/key
+  // interaction instead of surfaced as an error.
+  useEffect(() => {
+    const bgm = new Audio(BGM_SRC);
+    bgm.loop = true;
+    bgm.volume = BGM_VOLUME;
+
+    const tryPlay = () => bgm.play().catch(() => {});
+    tryPlay();
+
+    const resumeOnInteraction = () => {
+      tryPlay();
+      window.removeEventListener('pointerdown', resumeOnInteraction);
+      window.removeEventListener('keydown', resumeOnInteraction);
+    };
+    window.addEventListener('pointerdown', resumeOnInteraction);
+    window.addEventListener('keydown', resumeOnInteraction);
+
+    return () => {
+      window.removeEventListener('pointerdown', resumeOnInteraction);
+      window.removeEventListener('keydown', resumeOnInteraction);
+      bgm.pause();
+    };
+  }, []);
 
   // FE-R-20: decide once whether voice is even possible. Everything else works
   // regardless.
