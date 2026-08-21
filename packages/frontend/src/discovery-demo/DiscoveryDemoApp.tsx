@@ -170,8 +170,6 @@ function SkillResultCard({ skill }: { skill: SkillSummary }) {
 
 function ProductColumn({ meta }: { meta: ProductMeta }) {
   const feed = useDiscoveryFeed(meta.productId);
-  const [posting, setPosting] = useState(false);
-  const [runError, setRunError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -179,35 +177,19 @@ function ProductColumn({ meta }: { meta: ProductMeta }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [feed.attempts.length]);
 
-  const running = posting || feed.phase === 'started' || feed.phase === 'analysing';
-
-  async function runNow() {
-    setPosting(true);
-    setRunError(null);
-    try {
-      const res = await fetch(`/internal/discovery/${meta.productId}/run`, { method: 'POST' });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { failure?: { message?: string } } | null;
-        setRunError(body?.failure?.message ?? `요청 실패 (${res.status})`);
-      }
-    } catch {
-      setRunError('서버에 연결할 수 없습니다.');
-    } finally {
-      setPosting(false);
-      window.setTimeout(() => setRunError(null), 4000);
-    }
-  }
+  const listening = feed.phase === 'idle';
 
   return (
     <section className="discovery-column" data-product={meta.productId} data-testid={`discovery-column-${meta.productId}`}>
       <header className="discovery-column-head">
         <h2>{meta.name}</h2>
-        <button type="button" onClick={runNow} disabled={running} data-testid={`discovery-run-${meta.productId}`}>
-          {running ? '진행 중...' : '지금 발견하기'}
-        </button>
+        {/* No manual trigger here - real usage crossing the threshold (or
+            device-stub's fixture-driven flushes) is what starts a run. This
+            screen only ever watches, so "watching it happen live" stays true. */}
+        <span className={`discovery-listen-badge ${listening ? 'discovery-listen-idle' : 'discovery-listen-active'}`}>
+          {listening ? '대기 중' : '감지됨'}
+        </span>
       </header>
-
-      {runError ? <p className="discovery-run-error">{runError}</p> : null}
 
       <PhaseStepper phase={feed.phase} />
 
