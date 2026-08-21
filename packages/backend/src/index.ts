@@ -52,6 +52,12 @@ function loadAppContextFixturesOnBoot(): void {
     console.log(`[app-context] SEED SKIPPED: could not read fixtures dir ${dir}: ${(err as Error).message}`);
     return;
   }
+  // Same reasoning as device-stub's massagechair-<scenario> filter: only the
+  // boot scenario's own story loads here, the rest are pulled in on demand by
+  // /internal/context/reseed when their button is pressed - loading all of
+  // them at once mixes rain/walk/screen context into one window before
+  // anyone has pressed a button.
+  filenames = filenames.filter((f) => !f.startsWith("app-context-") || f === "app-context-rain.jsonl");
   if (only) filenames = filenames.filter((f) => only.includes(f.replace(/\.jsonl$/, "")));
 
   for (const name of filenames) {

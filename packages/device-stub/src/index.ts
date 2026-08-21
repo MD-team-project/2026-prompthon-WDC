@@ -29,14 +29,21 @@ const PORT = Number(process.env.DEVICE_STUB_PORT ?? 4000);
 const FLUSH_URL = process.env.FLUSH_URL ?? "http://localhost:3000/internal/usage/flush";
 const FLUSH_INTERVAL_MS = Number(process.env.FLUSH_INTERVAL_MS ?? 3000);
 const SEED_URL = process.env.SEED_URL ?? FLUSH_URL.replace("/usage/flush", "/usage/seed");
+const RESEED_URL = process.env.RESEED_URL ?? FLUSH_URL.replace("/usage/flush", "/usage/reseed");
+const CONTEXT_RESEED_URL = process.env.CONTEXT_RESEED_URL ?? FLUSH_URL.replace("/usage/flush", "/context/reseed");
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
 // One file per product+scenario (e.g. shoecase-simple.jsonl,
 // massagechair-rain.jsonl), loaded independently rather than one combined
 // file - keeps each scenario's signal clean instead of mixing several
 // patterns into one blob discovery has to pick just one of (Q6: max 1 skill
 // per run). Set SEED_FIXTURES to a comma-separated subset of filenames
-// (no .jsonl) to load only specific scenarios; unset loads everything found.
+// (no .jsonl) to load only specific scenarios; unset loads everything found
+// EXCEPT the massagechair-<scenario> files that don't match the boot
+// scenario (see the note above MASSAGECHAIR_SCENARIO_PREFIX below - loading
+// all three at once is exactly what produced a discovered skill describing
+// two conditions in one story).
 const SEED_FIXTURES = process.env.SEED_FIXTURES?.split(",").map((s) => s.trim());
+const MASSAGECHAIR_SCENARIO_PREFIX = "massagechair-";
 
 const log = (msg: string) => console.log(`[device-stub] ${msg}`);
 
@@ -110,7 +117,7 @@ app.get("/context/today", (_req, res) => {
  * readings. Both in one route because from the caller's side it is the same
  * act - "make today look like this".
  */
-app.post("/context/today", (req, res) => {
+app.post("/context/today", async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const { scenario, ...overrides } = body;
 
@@ -129,6 +136,12 @@ app.post("/context/today", (req, res) => {
       });
       return;
     }
+    // The whole point of a scenario button: massagechair's history swaps to
+    // THAT scenario's one-story fixture, replacing whatever was there before
+    // (not adding to it - see replaceEvents's own note on why "adding"
+    // reproduces the two-conditions-in-one-skill bug).
+    await reseedMassagechair(scenario);
+    await reseedContext(scenario);
     // A scenario plus overrides is honoured in that order, so `{ scenario:
     // "walk", screenTimeMinutes: 240 }` means what it reads like.
     if (Object.keys(overrides).length === 0) {
@@ -167,6 +180,15 @@ app.get("/health", (_req, res) => {
  * loads is the same "quiet failure" risk already flagged for discovery
  * generally, so this logs loudly on final failure instead of swallowing it.
  */
+function readFixtureFile(name: string): unknown[] {
+  const raw = readFileSync(join(FIXTURES_DIR, name), "utf-8");
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
 function loadFixtureFiles(): { name: string; events: unknown[] }[] {
   let filenames: string[];
   try {
@@ -176,19 +198,71 @@ function loadFixtureFiles(): { name: string; events: unknown[] }[] {
     return [];
   }
 
+  // Only the boot scenario's massagechair story loads at boot - the other
+  // two are read on demand by reseedMassagechair when their button is
+  // pressed, never alongside it. Loading all three together is exactly what
+  // produced a discovered skill describing two (or three) conditions in one
+  // story.
+  filenames = filenames.filter(
+    (f) => !f.startsWith(MASSAGECHAIR_SCENARIO_PREFIX) || f === `massagechair-${bootScenario}.jsonl`,
+  );
+
   if (SEED_FIXTURES) {
     filenames = filenames.filter((f) => SEED_FIXTURES.includes(f.replace(/\.jsonl$/, "")));
   }
 
-  return filenames.map((name) => {
-    const raw = readFileSync(join(FIXTURES_DIR, name), "utf-8");
-    const events = raw
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => JSON.parse(line));
-    return { name, events };
-  });
+  return filenames.map((name) => ({ name, events: readFixtureFile(name) }));
+}
+
+/**
+ * Swaps massagechair's ENTIRE usage history to the given scenario's fixture,
+ * via the backend's replace-not-append reseed endpoint. Missing fixture
+ * (e.g. a scenario with no authored story) is a no-op, logged rather than
+ * thrown - a scenario switch should not fail just because this one product
+ * has nothing scripted for it.
+ */
+async function reseedMassagechair(scenario: string): Promise<void> {
+  const filename = `massagechair-${scenario}.jsonl`;
+  let events: unknown[];
+  try {
+    events = readFixtureFile(filename);
+  } catch {
+    log(`reseed skipped: no ${filename}`);
+    return;
+  }
+
+  try {
+    const res = await fetch(RESEED_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId: "massagechair", events }),
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    log(`reseeded massagechair -> ${filename} (${events.length} events)`);
+  } catch (err) {
+    log(`RESEED FAILED for ${filename}: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * The other half of a scenario switch: backend owns the app-context fixtures
+ * and reads its own file, so this just names the scenario - see
+ * /internal/context/reseed. Without this, weather/steps/screen-time history
+ * stays on whatever scenario booted the process, so discovery correlates the
+ * new scenario's device settings against the OLD scenario's context.
+ */
+async function reseedContext(scenario: string): Promise<void> {
+  try {
+    const res = await fetch(CONTEXT_RESEED_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario }),
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    log(`reseeded context -> app-context-${scenario}.jsonl`);
+  } catch (err) {
+    log(`CONTEXT RESEED FAILED for ${scenario}: ${(err as Error).message}`);
+  }
 }
 
 async function seedOnce(events: unknown[]): Promise<boolean> {

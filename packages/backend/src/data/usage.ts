@@ -27,6 +27,22 @@ export function seedEvents(incoming: UsageEvent[]): number {
   return incoming.length;
 }
 
+/**
+ * Drops a product's existing history and replaces it with `incoming`, for
+ * the demo-scenario switch: each scenario button has its own one-story
+ * fixture (`massagechair-rain.jsonl` etc.), and leaving the OLD scenario's
+ * history in place alongside the new one is exactly what produced a
+ * discovered skill mentioning two conditions at once (the bug this exists
+ * to fix). Same non-counting behaviour as `seedEvents` - a scenario switch
+ * is not a live interaction, so it must not itself cross the threshold.
+ */
+export function replaceEvents(productId: ProductId, incoming: UsageEvent[]): number {
+  const kept = events.filter((e) => e.productId !== productId);
+  events.length = 0;
+  events.push(...kept, ...incoming);
+  return incoming.length;
+}
+
 export function readWindow(productId: ProductId, days: number): UsageEvent[] {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   return events.filter((e) => e.productId === productId && new Date(e.at).getTime() >= cutoff);

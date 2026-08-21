@@ -27,6 +27,18 @@ export function readContextWindow(days: number): AppContextEvent[] {
 }
 
 /**
+ * Swaps the ENTIRE context history for a scenario switch, same reasoning as
+ * `replaceEvents` in usage.ts: the old scenario's weather/steps/screen-time
+ * story must not still be sitting in the window next to the new one, or
+ * discovery correlates the wrong device settings with the wrong context.
+ */
+export function replaceContext(incoming: AppContextEvent[]): number {
+  context.length = 0;
+  context.push(...incoming);
+  return incoming.length;
+}
+
+/**
  * The stored window with today's live reading folded in, replacing any stored
  * row for the same date.
  *
