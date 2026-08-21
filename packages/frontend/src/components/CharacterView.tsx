@@ -76,6 +76,7 @@ interface Props {
   streaming: boolean;
   levelUp: boolean;
   discovery: boolean;
+  poweredUp: boolean;
   compendiumOpen: boolean;
   logOpen: boolean;
   draft: string;
@@ -95,6 +96,7 @@ interface Props {
   onClearFeedback: () => void;
   onLevelUpDone: () => void;
   onDiscoveryDone: () => void;
+  onLevelUpTrigger: () => void;
 }
 
 export function CharacterView(props: Props) {
@@ -218,8 +220,19 @@ export function CharacterView(props: Props) {
           {/* Level and exp as one pill: the two numbers that make up progression,
               grouped together and apart from device state (FE-R-2). Exp is a
               bar rather than a second number - the level text already carries
-              the precise digit, and the bar is what reads at a glance. */}
-          <span className="hud-progress" data-testid="stat-progress">
+              the precise digit, and the bar is what reads at a glance.
+
+              A button, not a label: BE has no levelling logic yet (see
+              `applyLevelUp` in `pure.ts`), so this is the manual half of the
+              two ways to level up in the meantime - the other being reaching
+              two skills in the compendium. */}
+          <button
+            type="button"
+            className="hud-progress"
+            onClick={props.onLevelUpTrigger}
+            aria-label={`${t('stat.level')} ${character.level}, ${t('stat.levelUpTrigger')}`}
+            data-testid="stat-progress"
+          >
             <span className="hud-level tnum" data-testid="stat-level">
               {t('stat.level')} {character.level}
             </span>
@@ -230,7 +243,7 @@ export function CharacterView(props: Props) {
               {t('stat.exp')} {character.exp}
               {character.expToNext > 0 ? ` / ${character.expToNext}` : ''}
             </span>
-          </span>
+          </button>
         </div>
 
         <button
@@ -252,15 +265,18 @@ export function CharacterView(props: Props) {
           banner moved there too (see `CharacterStage`), and the two were
           landing on top of each other.
 
-          `busy` only waits on a bare discovery (no level-up) - the surprise
-          reaction is the moment the toast would otherwise cover, per
-          `SpotlightCard`'s own note. A level-up gets no such wait: the toast
-          is meant to land WITH it, not after it, so `levelUp` overrides
-          `discovery` here instead of adding to it.
+          `busy` waits on the discovery reaction whether or not a level-up is
+          also playing - the surprise/level-up animation is the moment the
+          toast would otherwise cover. Every discovery levels the character up
+          now (`applyDiscoveryLevelUp` in `state.ts`, since BE has no levelling
+          of its own yet), so the two are no longer separable events where
+          "landing WITH it" would still mean something different from "waiting
+          for it": the toast always appears a beat after the animation starts,
+          once that reaction clears.
         */}
         <SpotlightCard
           skill={latestSkill}
-          busy={props.discovery && !props.levelUp}
+          busy={props.discovery}
           t={t}
           onOpen={() => props.onToggleCompendium(true)}
         />
@@ -279,6 +295,7 @@ export function CharacterView(props: Props) {
             onLevelUpDone={props.onLevelUpDone}
             discovery={props.discovery}
             onDiscoveryDone={props.onDiscoveryDone}
+            poweredUp={props.poweredUp}
             pending={props.pending}
             streaming={props.streaming}
             t={t}

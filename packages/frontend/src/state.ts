@@ -30,7 +30,7 @@ import type {
   Skill,
   SkillDiscoveredEvent,
 } from '@prompthon/shared';
-import { applyExpBump, DISCOVERY_EXP_GAIN, MESSAGE_EXP_GAIN } from './pure';
+import { applyExpBump, applyLevelUp, MESSAGE_EXP_GAIN } from './pure';
 
 export type SseStatus = 'connecting' | 'open' | 'dropped';
 export type View = 'roster' | 'character';
@@ -83,6 +83,21 @@ export interface State {
    * is never replayed on arrival.
    */
   discovery: Record<string, boolean>;
+  /**
+   * Sticky, unlike `levelUp` above: once a character has levelled up at all
+   * this session, it stays in its powered-up idle form - this is what a
+   * character's art checks, not the transient effect flag, which clears the
+   * moment the effect finishes playing.
+   */
+  poweredUp: Record<string, boolean>;
+  /**
+   * A level-up earned by reaching two skills, held here until the discovery
+   * reaction for that exact skill finishes playing (`discovery/done` is where
+   * it resolves) - skill discovery and levelling up are separate events now,
+   * and this is what keeps their effects from landing on top of each other
+   * when one happens to cause the other.
+   */
+  pendingLevelUp: Record<string, boolean>;
   /** Local message id counter. Keeps id generation pure. */
   seq: number;
 }
@@ -116,7 +131,14 @@ export type Action =
   | { type: 'feedback/start'; skillId: string }
   | { type: 'feedback/clear' }
   | { type: 'levelUp/done'; characterId: string }
-  | { type: 'discovery/done'; characterId: string };
+  | { type: 'discovery/done'; characterId: string }
+  /**
+   * The other way to level up, alongside reaching two skills: tapping the
+   * level/exp button in the HUD (`CharacterView`). Immediate, unlike the
+   * two-skill path - there's no reaction it could be landing on top of, since
+   * nothing about it is tied to a discovery.
+   */
+  | { type: 'levelUp/trigger'; characterId: string };
 
 export function initialState(lang: Lang): State {
   return {
@@ -141,6 +163,8 @@ export function initialState(lang: Lang): State {
     messages: {},
     levelUp: {},
     discovery: {},
+    poweredUp: {},
+    pendingLevelUp: {},
     seq: 0,
   };
 }
@@ -348,8 +372,9 @@ export function reducer(state: State, action: Action): State {
         : state.deviceStats;
 
       // BE sends no progression at all (construction/be PR #7) - `response.progression`
-      // is mock-only. Absent it, a local cosmetic bump keeps the level/exp UI moving
-      // instead of freezing dead. See `applyExpBump`.
+      // is mock-only. Absent it, a local cosmetic bump keeps the exp bar moving
+      // instead of sitting dead. See `applyExpBump` - it never levels the
+      // character up on its own, so there is nothing here to check for that.
       const currentCharacter = state.characters.find((c) => c.id === characterId);
       const progression =
         response.progression ??
@@ -358,10 +383,6 @@ export function reducer(state: State, action: Action): State {
       const characters = progression
         ? applyProgression(state.characters, characterId, progression)
         : state.characters;
-
-      const levelUp = progression?.leveledUp
-        ? { ...state.levelUp, [characterId]: true }
-        : state.levelUp;
 
       const skills = response.skill
         ? { ...state.skills, [characterId]: upsertSkill(state.skills[characterId], response.skill) }
@@ -372,7 +393,6 @@ export function reducer(state: State, action: Action): State {
         messages,
         deviceStats,
         characters,
-        levelUp,
         skills,
         // FE-R-4
         pending: { ...state.pending, [characterId]: false },
@@ -411,25 +431,51 @@ export function reducer(state: State, action: Action): State {
       const onScreen = state.view === 'character' && state.selectedCharacterId === event.characterId;
       const discovered = isNewSkill(state.skills[event.characterId], event.skill);
 
-      // The skill and the progression are applied either way, so they are
-      // correct whenever the user arrives.
+      // The skill is applied either way, so it is correct whenever the user
+      // arrives. Discovery is visual only now - the `surprise` reaction below
+      // and nothing else. Levelling up is a fully separate concern (see
+      // `applyLevelUp`); the only thing this event can do toward it is push
+      // the active skill count across the two-skill mark.
       const skills = {
         ...state.skills,
         [event.characterId]: upsertSkill(state.skills[event.characterId], event.skill),
       };
-      // Same BE gap as `action/response`: a real discovery event carries no
-      // progression, so it falls back to a (bigger) local cosmetic bump.
-      const discoveryCharacter = state.characters.find((c) => c.id === event.characterId);
-      const progression =
-        event.progression ??
-        (discoveryCharacter ? applyExpBump(discoveryCharacter, DISCOVERY_EXP_GAIN) : null);
-      const characters = progression
-        ? applyProgression(state.characters, event.characterId, progression)
-        : state.characters;
+
+      const activeBefore = (state.skills[event.characterId] ?? []).filter((s) => s.status === 'active').length;
+      const activeAfter = skills[event.characterId].filter((s) => s.status === 'active').length;
+      const crossesTwoSkills = activeBefore < 2 && activeAfter >= 2;
 
       // The announcement is appended regardless, so opening that character shows
       // it saying what it found rather than showing nothing.
       const messages = appendMessage(state.messages, event.characterId, event.message);
+
+      // A reaction is about to play for this exact discovery, on screen - the
+      // level-up has to wait for it to finish (`discovery/done` is where it
+      // actually resolves) rather than land on top of it.
+      if (onScreen && crossesTwoSkills && discovered) {
+        return {
+          ...state,
+          skills,
+          messages,
+          discovery: { ...state.discovery, [event.characterId]: true },
+          pendingLevelUp: { ...state.pendingLevelUp, [event.characterId]: true },
+        };
+      }
+
+      // Nothing to wait for here - either this doesn't cross the mark, or it
+      // did without being a fresh discovery (a revision changing status, in
+      // principle), so there's no reaction playing to land on top of.
+      const character = state.characters.find((c) => c.id === event.characterId);
+      const progression = crossesTwoSkills && character ? applyLevelUp(character) : null;
+      const characters = progression
+        ? applyProgression(state.characters, event.characterId, progression)
+        : state.characters;
+      // Sticky for the rest of the session, unlike `levelUp` below - this is
+      // what a character's idle art checks to stay in its powered-up form
+      // after the effect itself has finished playing.
+      const poweredUp = progression
+        ? { ...state.poweredUp, [event.characterId]: true }
+        : state.poweredUp;
 
       if (onScreen) {
         // FE-R-9: the effect is not synchronised with the message. Both are
@@ -441,9 +487,8 @@ export function reducer(state: State, action: Action): State {
           skills,
           characters,
           messages,
-          levelUp: progression?.leveledUp
-            ? { ...state.levelUp, [event.characterId]: true }
-            : state.levelUp,
+          poweredUp,
+          levelUp: progression ? { ...state.levelUp, [event.characterId]: true } : state.levelUp,
           discovery: discovered
             ? { ...state.discovery, [event.characterId]: true }
             : state.discovery,
@@ -455,12 +500,14 @@ export function reducer(state: State, action: Action): State {
       // The level-up effect (and the discovery reaction) are deliberately NOT
       // queued for arrival. They happened while the user was elsewhere, and
       // playing them on arrival would assert a timing that did not occur. The
-      // badge is the signal; progression and the skill are already applied.
+      // badge is the signal; progression, the skill and the sticky
+      // powered-up art are already applied.
       return {
         ...state,
         skills,
         characters,
         messages,
+        poweredUp,
         unseen: {
           ...state.unseen,
           [event.characterId]: (state.unseen[event.characterId] ?? 0) + 1,
@@ -486,9 +533,44 @@ export function reducer(state: State, action: Action): State {
     }
 
     case 'discovery/done': {
+      const { characterId } = action;
       const discovery = { ...state.discovery };
-      delete discovery[action.characterId];
-      return { ...state, discovery };
+      delete discovery[characterId];
+
+      // The discovery this level-up was waiting on has just finished playing
+      // - now it can land, same as it would have if nothing had made it wait.
+      if (!state.pendingLevelUp[characterId]) {
+        return { ...state, discovery };
+      }
+
+      const pendingLevelUp = { ...state.pendingLevelUp };
+      delete pendingLevelUp[characterId];
+
+      const character = state.characters.find((c) => c.id === characterId);
+      if (!character) return { ...state, discovery, pendingLevelUp };
+
+      const progression = applyLevelUp(character);
+      return {
+        ...state,
+        discovery,
+        pendingLevelUp,
+        characters: applyProgression(state.characters, characterId, progression),
+        levelUp: { ...state.levelUp, [characterId]: true },
+        poweredUp: { ...state.poweredUp, [characterId]: true },
+      };
+    }
+
+    case 'levelUp/trigger': {
+      const { characterId } = action;
+      const character = state.characters.find((c) => c.id === characterId);
+      if (!character) return state;
+      const progression = applyLevelUp(character);
+      return {
+        ...state,
+        characters: applyProgression(state.characters, characterId, progression),
+        levelUp: { ...state.levelUp, [characterId]: true },
+        poweredUp: { ...state.poweredUp, [characterId]: true },
+      };
     }
 
     default:

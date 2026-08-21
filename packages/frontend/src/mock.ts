@@ -157,7 +157,6 @@ const scriptedDiscoveries: Array<{
         discoveredAt: "2026-08-20T09:00:08Z",
         revisedAt: null,
       },
-      progression: { level: 3, exp: 0, expToNext: 200, leveledUp: true },
     },
   },
   {
@@ -185,7 +184,6 @@ const scriptedDiscoveries: Array<{
         discoveredAt: "2026-08-20T09:00:20Z",
         revisedAt: null,
       },
-      progression: { level: 2, exp: 0, expToNext: 120, leveledUp: true },
     },
   },
   {
@@ -213,7 +211,6 @@ const scriptedDiscoveries: Array<{
         discoveredAt: "2026-08-20T09:00:34Z",
         revisedAt: null,
       },
-      progression: { level: 4, exp: 0, expToNext: 300, leveledUp: true },
     },
   },
 ];

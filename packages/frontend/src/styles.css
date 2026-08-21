@@ -681,6 +681,9 @@ svg {
 }
 
 /* Level and exp grouped into one pill, apart from device state below. */
+/* A button now (level up manually by tapping it - see the note in
+   `CharacterView`), so it gets the same "sticker button" press every other
+   tappable pill in this app uses. */
 .hud-progress {
   display: inline-flex;
   align-items: center;
@@ -690,6 +693,12 @@ svg {
   border: 2px solid var(--ink);
   background: var(--surface);
   box-shadow: 0 2px 0 var(--ink-soft);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+
+.hud-progress:active {
+  transform: translateY(2px);
+  box-shadow: none;
 }
 
 /* The level number as a gold "Lv" chip rather than plain coloured text - a
