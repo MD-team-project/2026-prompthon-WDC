@@ -64,40 +64,50 @@ export function progressRatio(exp: number, expToNext: number): number {
 /** Cosmetic exp gain for an ordinary successful message. See `applyExpBump`. */
 export const MESSAGE_EXP_GAIN = 15;
 
-/** Cosmetic exp gain for a skill discovery. Bigger, since it is the rarer event. */
-export const DISCOVERY_EXP_GAIN = 40;
-
 /**
- * Local, cosmetic-only progression bump for a successful interaction.
+ * Local, cosmetic-only exp bump for a successful interaction. Never levels up
+ * on its own - clamped at `expToNext` instead of rolling over - because
+ * levelling is deliberately its own thing now (`applyLevelUp` below), fired
+ * only by reaching two skills or by the level/exp HUD button, never by exp
+ * happening to fill the bar. `leveledUp` is always `false`; it stays on the
+ * return shape only because `Progression` requires it.
  *
  * BE (construction/be, PR #7) sends no progression data at all - no level, no
  * exp, no curve - so a response's `progression` field is never populated by a
- * real reply. `state.ts` falls back to this so the level/exp UI keeps moving
- * instead of sitting dead, rather than because BE reported anything. Nothing
- * produced here is ever presented as data BE stated as fact.
- *
- * Growth factor and gain amounts are arbitrary demo pacing, not a curve BE
- * owns - contrast with `progressRatio`, which only ever renders numbers
- * supplied to it.
+ * real reply. `state.ts` falls back to this so the exp bar keeps moving
+ * instead of sitting dead, rather than because BE reported anything.
  */
 export function applyExpBump(
   character: { level: number; exp: number; expToNext: number },
   amount: number,
-): { level: number; exp: number; expToNext: number; leveledUp: boolean } {
+): { level: number; exp: number; expToNext: number; leveledUp: false } {
   const { level, exp, expToNext } = character;
   if (!Number.isFinite(expToNext) || expToNext <= 0) {
     // Nothing to fill toward - leave it exactly as it was rather than growing
     // a curve BE never described.
     return { level, exp, expToNext, leveledUp: false };
   }
-  const nextExp = exp + amount;
-  if (nextExp < expToNext) {
-    return { level, exp: nextExp, expToNext, leveledUp: false };
-  }
+  return { level, exp: Math.min(exp + amount, expToNext), expToNext, leveledUp: false };
+}
+
+/**
+ * The one real level-up bump, guaranteed rather than threshold-dependent -
+ * BE has no levelling logic at all yet, so until it does, this is what fires
+ * for the two things that are now allowed to level a character up: reaching
+ * two skills in the compendium, and tapping the level/exp button in the HUD
+ * (see `state.ts`'s `sse/announcement` and `levelUp/trigger`). A skill
+ * discovery on its own never calls this - see the note on `applyExpBump`.
+ */
+export function applyLevelUp(character: {
+  level: number;
+  exp: number;
+  expToNext: number;
+}): { level: number; exp: number; expToNext: number; leveledUp: true } {
+  const { level, expToNext } = character;
   return {
     level: level + 1,
-    exp: nextExp - expToNext,
-    expToNext: Math.round(expToNext * 1.4),
+    exp: 0,
+    expToNext: Number.isFinite(expToNext) && expToNext > 0 ? Math.round(expToNext * 1.4) : expToNext,
     leveledUp: true,
   };
 }

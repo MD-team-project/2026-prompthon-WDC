@@ -259,20 +259,23 @@ describe('skill lifecycle', () => {
 // ---------------------------------------------------------------------------
 
 describe('announcements', () => {
-  function announcement(characterId: string): SkillDiscoveredEvent {
+  // `skillId` defaults to one-per-character so existing call sites keep
+  // meaning "the character's only skill" - tests that need a SECOND distinct
+  // skill (to cross the two-skill mark) pass their own.
+  function announcement(characterId: string, skillId = `sk_${characterId}`): SkillDiscoveredEvent {
     return {
       characterId,
       message: {
-        id: `sse_${characterId}`,
+        id: `sse_${skillId}`,
         characterId,
         role: 'character',
         text: '스킬을 하나 만들었어요.',
         kind: 'announcement',
-        skillId: `sk_${characterId}`,
+        skillId,
         at: '2026-08-20T09:05:00Z',
       },
       skill: {
-        id: `sk_${characterId}`,
+        id: skillId,
         characterId,
         name: '새 스킬',
         tier: 'basic',
@@ -282,28 +285,32 @@ describe('announcements', () => {
         discoveredAt: '2026-08-20T09:05:00Z',
         revisedAt: null,
       },
-      progression: { level: 4, exp: 0, expToNext: 300, leveledUp: true },
     };
   }
 
-  it('raises no badge and plays the effect when the character is on screen', () => {
+  it('plays the discovery reaction and raises no badge when the character is on screen', () => {
     const state = reducer(loaded(), { type: 'sse/announcement', event: announcement('shoecase') });
 
     expect(state.unseen['shoecase']).toBeUndefined();
-    expect(state.levelUp['shoecase']).toBe(true);
+    expect(state.discovery['shoecase']).toBe(true);
+    // A lone discovery never levels a character up on its own any more - see
+    // `applyLevelUp` and the note on `sse/announcement` in `state.ts`.
+    expect(state.levelUp['shoecase']).toBeUndefined();
     expect(activeSkills(state, 'shoecase')).toHaveLength(1);
   });
 
-  it('raises a badge and does not queue the effect when the character is elsewhere', () => {
+  it('raises a badge and does not queue the reaction when the character is elsewhere, and does not level up', () => {
     const state = reducer(loaded(), { type: 'sse/announcement', event: announcement('pral') });
 
     expect(state.unseen['pral']).toBe(1);
     // Deliberately not queued: it happened while the user was elsewhere, and
     // replaying it on arrival would assert a timing that did not occur.
+    expect(state.discovery['pral']).toBeUndefined();
     expect(state.levelUp['pral']).toBeUndefined();
-    // The skill and progression are applied anyway, so they are correct on arrival.
+    // The skill is applied anyway, so it is correct on arrival - but a single
+    // discovery never touches progression, on screen or off.
     expect(activeSkills(state, 'pral')).toHaveLength(1);
-    expect(state.characters.find((c) => c.id === 'pral')!.level).toBe(4);
+    expect(state.characters.find((c) => c.id === 'pral')!.level).toBe(2);
     expect(unseenTotalExcept(state, 'shoecase')).toBe(1);
   });
 
@@ -314,6 +321,45 @@ describe('announcements', () => {
 
     state = reducer(state, { type: 'character/select', characterId: 'pral' });
     expect(state.unseen['pral']).toBeUndefined();
+  });
+
+  it('defers levelling up until the second discovery reaction finishes, on screen', () => {
+    let state = reducer(loaded(), { type: 'sse/announcement', event: announcement('shoecase', 'sk_a') });
+    state = reducer(state, { type: 'sse/announcement', event: announcement('shoecase', 'sk_b') });
+
+    // Two skills is the mark, but the second one's own reaction is still
+    // "playing" - `discovery` staying true stands in for that here, since the
+    // reducer has no timers of its own - so the level-up hasn't landed yet.
+    expect(activeSkills(state, 'shoecase')).toHaveLength(2);
+    expect(state.discovery['shoecase']).toBe(true);
+    expect(state.levelUp['shoecase']).toBeUndefined();
+    expect(state.characters.find((c) => c.id === 'shoecase')!.level).toBe(3);
+
+    state = reducer(state, { type: 'discovery/done', characterId: 'shoecase' });
+
+    expect(state.discovery['shoecase']).toBeUndefined();
+    expect(state.levelUp['shoecase']).toBe(true);
+    expect(state.poweredUp['shoecase']).toBe(true);
+    expect(state.characters.find((c) => c.id === 'shoecase')!.level).toBe(4);
+  });
+
+  it('levels up immediately, without queuing the effect, when the two-skill mark is crossed off screen', () => {
+    let state = reducer(loaded(), { type: 'sse/announcement', event: announcement('pral', 'sk_a') });
+    state = reducer(state, { type: 'sse/announcement', event: announcement('pral', 'sk_b') });
+
+    expect(state.characters.find((c) => c.id === 'pral')!.level).toBe(3);
+    expect(state.poweredUp['pral']).toBe(true);
+    expect(state.levelUp['pral']).toBeUndefined();
+  });
+});
+
+describe('levelUp/trigger: the manual half of levelling up', () => {
+  it('levels the character up immediately, with the effect', () => {
+    const state = reducer(loaded(), { type: 'levelUp/trigger', characterId: 'shoecase' });
+
+    expect(state.characters.find((c) => c.id === 'shoecase')!.level).toBe(4);
+    expect(state.levelUp['shoecase']).toBe(true);
+    expect(state.poweredUp['shoecase']).toBe(true);
   });
 });
 

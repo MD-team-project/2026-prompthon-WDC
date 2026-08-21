@@ -25,13 +25,20 @@
  *
  * FE-R-7: nothing here is a control. No slider, no toggle, no stepper.
  *
- * The massage chair is the one product with an animated reaction so far: two
+ * The massage chair is the one product with an animated reaction so far:
  * frame sequences dropped in under `public/characters/massagechair`. Frame 0
- * of `surprise/` is the idle pose (no effect). `surprise/` plays once while
- * `discovery` is true (a new skill arrived); `levelup/` plays once while
- * `levelUp` is true, and takes priority if both happen to be true at once -
- * levelling up is the rarer event. Either one hands back to idle when its
- * frames run out, driven by frame count rather than a fixed duration.
+ * of `surprise/` is the idle pose (no effect) - unless the character has
+ * levelled up at all this session (`poweredUp`), in which case idle becomes
+ * the looping `poweredup/` fire-aura sequence instead, for as long as nothing
+ * else is claiming the sprite (`showPoweredUp` below). `surprise/` plays once while
+ * `discovery` is true (a new skill arrived) - a discovery no longer implies a
+ * level-up (they're separate events now, see `state.ts`), so this is the ONLY
+ * thing a skill discovery ever plays, for every product. `poweredup/` is also
+ * what plays WHILE `levelUp` is true, not just after: levelling up has no
+ * dedicated transition sequence of its own any more, since being sticky, the
+ * loop it hands off to on its own is already the level-up's own reaction.
+ * `levelUp` clears on a fixed timer (`LEVEL_UP_MS`) rather than a frame count,
+ * same as every other product, because looping has no natural "done".
  *
  * Two more sequences loop rather than play once: `thinking/` while `pending`
  * is true and no token has arrived yet, and `talking/` from the first
@@ -41,17 +48,18 @@
  *
  * `pral` and `shoecase` have real art too (`STATIC_ART_SRC` below) but only
  * one frame each, no reaction sequence - so they keep the CSS pop/burst
- * effect on top of that single image, timed by `LEVEL_UP_MS` instead, and
- * `discovery` for them clears on `DISCOVERY_MS` rather than on frame count,
- * for the same reason. Any product with neither falls back to the abstract
- * placeholder (Q8 C).
+ * effect (and no `poweredup`-style alternate idle, having no such asset) on
+ * top of that single image, timed by `LEVEL_UP_MS` too, and `discovery` for
+ * them clears on `DISCOVERY_MS` rather than on frame count, for the same
+ * reason. Any product with neither falls back to the abstract placeholder
+ * (Q8 C).
  */
 
 import { useEffect, useRef, useState } from 'react';
 import type { ProductId } from '@prompthon/shared';
 import type { translator } from '../strings';
 
-/** Long enough that an SSE announcement typically lands mid-effect. Non-massagechair only. */
+/** No frame-driven sequence has a natural "done" any more (see the note above), so every product - massagechair included - clears `levelUp` on this timer. Long enough that an SSE announcement typically lands mid-effect. */
 const LEVEL_UP_MS = 1500;
 
 /**
@@ -67,10 +75,6 @@ const DISCOVERY_MS = 1500;
 const SURPRISE_FRAME_COUNT = 65;
 const SURPRISE_FRAME_MS = 40;
 
-/** Frames 65-120 of "loop-1", re-indexed from 0. */
-const LEVEL_UP_FRAME_COUNT = 56;
-const LEVEL_UP_FRAME_MS = 40;
-
 /** Full 121-frame "thinking" loop, played for as long as a chat reply is pending. */
 const THINKING_FRAME_COUNT = 121;
 const THINKING_FRAME_MS = 40;
@@ -79,12 +83,12 @@ const THINKING_FRAME_MS = 40;
 const TALKING_FRAME_COUNT = 73;
 const TALKING_FRAME_MS = 40;
 
+/** Full 121-frame "poweredup" loop - the level-up reaction AND what idle becomes afterward (see `showPoweredUp` below). */
+const POWEREDUP_FRAME_COUNT = 121;
+const POWEREDUP_FRAME_MS = 40;
+
 function surpriseFrameSrc(index: number): string {
   return `/characters/massagechair/surprise/frame-${index}.webp`;
-}
-
-function levelUpFrameSrc(index: number): string {
-  return `/characters/massagechair/levelup/frame-${index}.webp`;
 }
 
 function thinkingFrameSrc(index: number): string {
@@ -93,6 +97,10 @@ function thinkingFrameSrc(index: number): string {
 
 function talkingFrameSrc(index: number): string {
   return `/characters/massagechair/talking/frame-${index}.webp`;
+}
+
+function poweredUpFrameSrc(index: number): string {
+  return `/characters/massagechair/poweredup/frame-${index}.webp`;
 }
 
 /** The single idle image for products with real art but no reaction sequence. */
@@ -109,6 +117,8 @@ interface Props {
   /** True from the moment a genuinely new skill arrives until the reaction finishes playing. */
   discovery: boolean;
   onDiscoveryDone: () => void;
+  /** Sticky for the rest of the session once the character has levelled up at all. */
+  poweredUp: boolean;
   /** True while a chat reply is in flight for this character. */
   pending: boolean;
   /** True from the reply's first streamed token until it finishes arriving. */
@@ -123,6 +133,7 @@ export function CharacterStage({
   onLevelUpDone,
   discovery,
   onDiscoveryDone,
+  poweredUp,
   pending,
   streaming,
   t,
@@ -141,35 +152,14 @@ export function CharacterStage({
   const onDiscoveryDoneRef = useRef(onDiscoveryDone);
   onDiscoveryDoneRef.current = onDiscoveryDone;
 
-  // The generic CSS pop/burst effect, timed rather than frame-driven. Only for
-  // products with no real art - `isMassageChair` completes its own effect
-  // below, once its frames run out.
+  // Timed rather than frame-driven, for every product now - see the note at
+  // the top of the file on why massagechair no longer has its own frame-count
+  // version of this.
   useEffect(() => {
-    if (isMassageChair || !levelUp) return;
+    if (!levelUp) return;
     const timer = setTimeout(() => onLevelUpDoneRef.current(), LEVEL_UP_MS);
     return () => clearTimeout(timer);
-  }, [levelUp, isMassageChair]);
-
-  const [levelUpFrame, setLevelUpFrame] = useState(0);
-
-  useEffect(() => {
-    if (!isMassageChair || !levelUp) return;
-
-    let frame = 0;
-    setLevelUpFrame(0);
-    const timer = setInterval(() => {
-      frame += 1;
-      if (frame >= LEVEL_UP_FRAME_COUNT) {
-        clearInterval(timer);
-        setLevelUpFrame(0);
-        onLevelUpDoneRef.current();
-        return;
-      }
-      setLevelUpFrame(frame);
-    }, LEVEL_UP_FRAME_MS);
-
-    return () => clearInterval(timer);
-  }, [levelUp, isMassageChair]);
+  }, [levelUp]);
 
   const [surpriseFrame, setSurpriseFrame] = useState(0);
 
@@ -241,12 +231,39 @@ export function CharacterStage({
     return () => clearInterval(timer);
   }, [streaming, isMassageChair]);
 
-  // Level-up and the discovery reaction both outrank talking/thinking - they
-  // are the rarer events and each already has its own finite frame count to
-  // run out. Talking outranks thinking since it means the reply has started
-  // arriving, which is further along than merely waiting on one.
-  const spriteSrc = levelUp
-    ? levelUpFrameSrc(levelUpFrame)
+  // The discovery reaction and the talking/thinking loops all outrank the
+  // powered-up loop while any of them is claiming the sprite - `poweredUp`
+  // being sticky doesn't mean it wins by default, only that it's what idle
+  // falls back to once none of them is. `levelUp` is the one exception: it
+  // outranks all three, since it's what the powered-up loop is ALSO the
+  // reaction for now (see the top-of-file note) - without this, a level-up
+  // landing mid-reaction would show the wrong animation.
+  const reacting = discovery || streaming || thinking;
+  const showPoweredUp = poweredUp && (levelUp || !reacting);
+
+  // Same "loop until the flag clears" shape as thinking/talking, except two
+  // different flags can keep it going - during the level-up moment itself,
+  // and again (uninterrupted, since `showPoweredUp` never goes false in
+  // between when nothing else intervenes) once idle for good afterward.
+  const [poweredUpFrame, setPoweredUpFrame] = useState(0);
+
+  useEffect(() => {
+    if (!isMassageChair || !showPoweredUp) {
+      setPoweredUpFrame(0);
+      return;
+    }
+
+    let frame = 0;
+    const timer = setInterval(() => {
+      frame = (frame + 1) % POWEREDUP_FRAME_COUNT;
+      setPoweredUpFrame(frame);
+    }, POWEREDUP_FRAME_MS);
+
+    return () => clearInterval(timer);
+  }, [showPoweredUp, isMassageChair]);
+
+  const spriteSrc = showPoweredUp
+    ? poweredUpFrameSrc(poweredUpFrame)
     : discovery
       ? surpriseFrameSrc(surpriseFrame)
       : streaming

@@ -289,6 +289,7 @@ export function App() {
           streaming={Boolean(state.streaming[character.id])}
           levelUp={Boolean(state.levelUp[character.id])}
           discovery={Boolean(state.discovery[character.id])}
+          poweredUp={Boolean(state.poweredUp[character.id])}
           compendiumOpen={state.compendiumOpen}
           logOpen={state.logOpen}
           draft={state.draft}
@@ -308,6 +309,7 @@ export function App() {
           onClearFeedback={() => dispatch({ type: 'feedback/clear' })}
           onLevelUpDone={() => dispatch({ type: 'levelUp/done', characterId: character.id })}
           onDiscoveryDone={() => dispatch({ type: 'discovery/done', characterId: character.id })}
+          onLevelUpTrigger={() => dispatch({ type: 'levelUp/trigger', characterId: character.id })}
         />
       )}
     </div>
