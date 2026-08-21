@@ -5,7 +5,7 @@
  * says the same thing the decision does: the stage is the only region that
  * grows, and everything else is a fixed strip around it.
  *
- *   hud            name, level+exp pill, back, compendium
+ *   hud            name, level+exp pill, back, compendium, scenario row
  *     + spotlight  the most recent discovery, as a toast floating just below
  *                  the HUD. It waits for the character's own reaction to
  *                  finish before appearing, stays until tapped, and renders
@@ -15,13 +15,18 @@
  *   switcher       the other two characters, one tap away
  *   stat-panel     device state, always here
  *   input-bar      voice first, text beneath
- *   + sheets       conversation log, skill compendium, today's readings -
- *                  raised, not routed. All three rise from the bottom
+ *   + sheets       conversation log, skill compendium - raised, not routed.
+ *                  Both rise from the bottom
  *
- * Today's readings (weather, steps, distance, screen time) used to be a second
- * panel above device state. They cost a row of the one budget that matters here
- * and are reference material rather than live state, so they moved behind the
- * HUD's weather button - see the note on it below.
+ * Today's readings (weather, steps, distance, screen time) used to have their
+ * own raised sheet behind a HUD button - a whole modal for four numbers turned
+ * out to be more ceremony than the reference material was worth. What is left
+ * is a demo lever: a slim second HUD row of scenario buttons (see
+ * `SCENARIO_BUTTONS`) that swap which of device-stub's presets is active,
+ * toggle-highlighted so the currently-active one reads as pressed in. No
+ * detail view for the resulting numbers - the character states the figure it
+ * acted on in what it says, which is what made the sheet checkable but rarely
+ * opened.
  *
  * Previously `.speech` was the only region with `flex: 1` and the character sat
  * in a fixed 176px band above it, which made the screen a chat client with an
@@ -40,22 +45,14 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type {
-  Character,
-  ChatMessage,
-  DailyContextStats,
-  DeviceStats,
-  Lang,
-  Skill,
-} from '@prompthon/shared';
+import type { Character, ChatMessage, DeviceStats, Lang, Skill } from '@prompthon/shared';
 // `neighbourId` is gone with swipe navigation - switching is switcher-only now.
 import type { ContextScenario } from '../api';
 import { progressRatio } from '../pure';
 import type { MicStatus } from '../state';
-import { productLabel, weatherGlyph, type translator } from '../strings';
+import { productLabel, type translator } from '../strings';
 import { CharacterStage } from './CharacterStage';
 import { CharacterSwitcher } from './CharacterSwitcher';
-import { ContextSheet } from './ContextSheet';
 import { DeviceStatStrip } from './DeviceStatStrip';
 import { InputBar } from './InputBar';
 import { SkillCompendium } from './SkillCompendium';
@@ -67,9 +64,6 @@ interface Props {
   characters: Character[];
   lang: Lang;
   deviceStats: DeviceStats | null;
-  /** Not per-character - one user, one reading. See `ContextSheet`. */
-  dailyContext: DailyContextStats | null;
-  contextFailed: boolean;
   messages: ChatMessage[];
   skills: Skill[];
   unseen: Record<string, number>;
@@ -108,6 +102,18 @@ interface Props {
   onSetScenario: (scenario: ContextScenario) => void;
 }
 
+/**
+ * Three of device-stub's four presets (`dailyContext.ts`) - `clear` (an
+ * unremarkable day) dropped since it is the one story with nothing for the
+ * character to react to, which makes it the least useful lever on a screen
+ * this size.
+ */
+const SCENARIO_BUTTONS: { scenario: Exclude<ContextScenario, 'clear'>; glyph: string }[] = [
+  { scenario: 'rain', glyph: '🌧️' },
+  { scenario: 'walk', glyph: '🚶' },
+  { scenario: 'screen', glyph: '📱' },
+];
+
 export function CharacterView(props: Props) {
   const { character, t } = props;
 
@@ -128,14 +134,18 @@ export function CharacterView(props: Props) {
   const slideTokenRef = useRef(0);
   const [slide, setSlide] = useState<{ token: number; direction: 1 | -1 } | null>(null);
 
-  /*
-   * Local, not in the reducer, unlike the log and compendium sheets. Those are
-   * per-character and their open state is something the rest of the app reasons
-   * about; today's readings are one user's single reading, shared by every
-   * character, and nothing outside this component needs to know whether the
-   * sheet is up.
+  /**
+   * Which scenario button reads as pressed. Tracked here rather than derived
+   * from `dailyContext` because device-stub's response is the resulting
+   * reading (weather/steps/distance/screen-time), not the preset name that
+   * produced it - and two presets (`walk`/`clear`) can even share a weather
+   * value, so the reading alone can't be reversed into a scenario anyway.
+   * This is a pure UI affordance for a lever only this row ever moves, so
+   * tracking the last click locally is exactly as correct as asking the
+   * server would be. Defaults to `rain`, matching device-stub's own boot
+   * default, so the toggle starts in sync without a fetch-and-detect step.
    */
-  const [contextOpen, setContextOpen] = useState(false);
+  const [activeScenario, setActiveScenario] = useState<ContextScenario>('rain');
 
   useEffect(() => {
     if (prevCharacterIdRef.current === character.id) return;
@@ -186,39 +196,6 @@ export function CharacterView(props: Props) {
               </span>
             ) : null}
           </button>
-
-          {/*
-            Today's readings live behind this, in the HUD rather than in a strip
-            above the input bar. The strip cost a row of a screen where
-            `.stage-wrap` is the only region with height to give, and the
-            readings are reference material - the character states the figure it
-            acted on in what it says, so the panel does not have to be permanently
-            open for the suggestion to be checkable.
-
-            Today's weather as the icon, so the control is not a neutral glyph:
-            the one reading that needs no unit doubles as the affordance.
-
-            Disabled rather than hidden while there is nothing to show. FE-R-19
-            wants a failure to say so, and a control that quietly disappears on
-            failure looks identical to one that was never there.
-          */}
-          <button
-            type="button"
-            className="hud-button hud-button-glyph"
-            onClick={() => setContextOpen(true)}
-            disabled={props.dailyContext === null}
-            aria-haspopup="dialog"
-            aria-label={
-              props.dailyContext === null
-                ? t(props.contextFailed ? 'context.unavailable' : 'context.none')
-                : t('context.detail')
-            }
-            data-testid="character-context-toggle"
-          >
-            <span aria-hidden="true">
-              {props.dailyContext === null ? '⋯' : weatherGlyph(props.dailyContext.weather)}
-            </span>
-          </button>
         </div>
 
         <div className="hud-id">
@@ -264,6 +241,40 @@ export function CharacterView(props: Props) {
           {t('character.skills')}
           <span className="pill tnum">{props.skills.length}</span>
         </button>
+
+        {/*
+          Demo levers, spanning the full HUD width as its own row rather than
+          squeezed into `.hud-left` beside the back button - four more
+          full-size buttons there overflowed into the compendium button's
+          column and stole its clicks (tried it). A slim second grid row
+          costs `.stage-wrap` far less height than the readings strip this
+          replaced ever did.
+
+          No separate weather-glyph indicator alongside these: the rain
+          button already shows 🌧️, so a second one next to it would just be
+          the same glyph twice. Styled as `.hud-button`/`.hud-button-glyph`,
+          the exact classes the single weather-toggle button used, so this
+          row reads as the same kind of control it replaced rather than a
+          new, lighter-weight one.
+        */}
+        <div className="hud-scenario-row" data-testid="hud-scenario-row">
+          {SCENARIO_BUTTONS.map(({ scenario, glyph }) => (
+            <button
+              key={scenario}
+              type="button"
+              className={`hud-button hud-button-glyph ${scenario === activeScenario ? 'hud-button-toggled' : ''}`}
+              onClick={() => {
+                setActiveScenario(scenario);
+                props.onSetScenario(scenario);
+              }}
+              aria-pressed={scenario === activeScenario}
+              aria-label={t(`scenario.${scenario}`)}
+              data-testid={`character-scenario-${scenario}`}
+            >
+              {glyph}
+            </button>
+          ))}
+        </div>
 
         {/*
           A toast, not a panel: it positions itself (`top: 100%` off this
@@ -380,20 +391,6 @@ export function CharacterView(props: Props) {
           lang={props.lang}
           t={t}
           onClose={() => props.onToggleCompendium(false)}
-        />
-      ) : null}
-
-      {/* Rises from the bottom like the other two, even though its button is in
-          the HUD - so does the compendium's. Where a sheet enters from is this
-          app's one sheet gesture, not a pointer back to the control that opened
-          it. */}
-      {contextOpen && props.dailyContext !== null ? (
-        <ContextSheet
-          context={props.dailyContext}
-          lang={props.lang}
-          t={t}
-          onClose={() => setContextOpen(false)}
-          onSetScenario={props.onSetScenario}
         />
       ) : null}
     </div>

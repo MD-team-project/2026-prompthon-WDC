@@ -11,15 +11,8 @@
  * unfilled and hiding the toggle - no other code changes.
  */
 
-import type { DailyContextStats, Lang, ProductId, WeatherCondition } from "@prompthon/shared";
-import {
-  groupThousands,
-  resolveLabel,
-  ringRatio,
-  splitDuration,
-  toTenth,
-  toWholeDegrees,
-} from "./pure";
+import type { Lang, ProductId } from "@prompthon/shared";
+import { resolveLabel } from "./pure";
 
 const ko = {
   "app.title": "Thin뀨",
@@ -40,26 +33,9 @@ const ko = {
   "stat.updating": "반영 중",
   "stat.none": "상태를 불러오는 중",
   "stat.device": "기기 상태",
-  "stat.context": "오늘의 기록",
-  "context.none": "오늘 기록을 불러오는 중",
-  "context.unavailable": "오늘 기록을 가져오지 못했어요",
-  "context.weather": "날씨",
-  "context.movement": "활동",
-  "context.steps": "걸음",
-  "context.distance": "이동",
-  "context.screen": "화면 시간",
-  "context.unit.steps": "걸음",
-  "context.unit.km": "km",
-  "context.detail": "오늘의 기록 자세히 보기",
-  "context.goal": "목표",
   "scenario.rain": "비 오는 날로 설정",
   "scenario.walk": "많이 걸은 날로 설정",
   "scenario.screen": "화면을 많이 본 날로 설정",
-  "scenario.clear": "평범한 날로 설정",
-  "weather.clear": "맑음",
-  "weather.rain": "비",
-  "weather.cloudy": "흐림",
-  "weather.snow": "눈",
   "stage.levelup": "LEVEL UP",
   "stage.switch": "캐릭터 전환",
   "speech.waiting": "말을 걸어보세요",
@@ -112,26 +88,9 @@ const en: Record<StringKey, string> = {
   "stat.updating": "updating",
   "stat.none": "Loading state",
   "stat.device": "Device state",
-  "stat.context": "Today so far",
-  "context.none": "Loading today's readings",
-  "context.unavailable": "Couldn't read today's figures",
-  "context.weather": "Weather",
-  "context.movement": "Activity",
-  "context.steps": "Steps",
-  "context.distance": "Distance",
-  "context.screen": "Screen time",
-  "context.unit.steps": "steps",
-  "context.unit.km": "km",
-  "context.detail": "See today's readings in detail",
-  "context.goal": "Goal",
   "scenario.rain": "Set to a rainy day",
   "scenario.walk": "Set to a high-step day",
   "scenario.screen": "Set to a high-screen-time day",
-  "scenario.clear": "Set to an ordinary day",
-  "weather.clear": "Clear",
-  "weather.rain": "Rain",
-  "weather.cloudy": "Cloudy",
-  "weather.snow": "Snow",
   "stage.levelup": "LEVEL UP",
   "stage.switch": "Switch character",
   "speech.waiting": "Say something to begin",
@@ -274,146 +233,6 @@ export function attributeValue(
     return String(value);
   }
   return attributeValues[lang][value] ?? value;
-}
-
-// ---------------------------------------------------------------------------
-// Today's context, turned into what the panel renders.
-// ---------------------------------------------------------------------------
-
-const WEATHER_GLYPHS: Record<WeatherCondition, string> = {
-  clear: "☀️",
-  rain: "🌧️",
-  cloudy: "☁️",
-  snow: "❄️",
-};
-
-export function weatherLabel(weather: WeatherCondition, lang: Lang): string {
-  return strings[lang][`weather.${weather}`];
-}
-
-/**
- * Decorative everywhere it is used, so every call site pairs it with the label
- * or with an `aria-label` - including the HUD button, whose accessible name is
- * the string, never the emoji.
- */
-export function weatherGlyph(weather: WeatherCondition): string {
-  return WEATHER_GLYPHS[weather];
-}
-
-/** ko "3시간 14분" / en "3h 14m", dropping the hours part below an hour. */
-export function screenTimeText(totalMinutes: number, lang: Lang): string {
-  const { hours, minutes } = splitDuration(totalMinutes);
-  if (lang === "ko") {
-    return hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`;
-  }
-  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-}
-
-export interface ContextRing {
-  key: string;
-  label: string;
-  value: string;
-  unit: string;
-  /** 0..1, already clamped. The ring's sweep. */
-  ratio: number;
-  /** The goal the ring is measured against, formatted. */
-  goal: string;
-}
-
-/**
- * The three widgets, in display order.
- *
- * A discriminated union rather than one uniform shape, for the same reason
- * `DailyContextStats` is typed where `DeviceStats` is generic: a temperature, a
- * pair of ring gauges and a duration have nothing in common to render
- * generically. Forcing them into one `{ label, value }` shape is what produced
- * the flat chip row this replaces, where a step count and a weather condition
- * looked like the same kind of fact.
- *
- * Order is decided here rather than in the component, and it is deliberate:
- * weather first because it is the signal the user did not choose, then what
- * their body did, then what their phone did. That is also roughly the order the
- * character reasons in (see the backend's shared agent instructions), so the
- * panel reads as the same story the character is telling.
- */
-export type ContextWidget =
-  | {
-      key: "weather";
-      kind: "weather";
-      label: string;
-      /** Decorative - `condition` carries the meaning. */
-      glyph: string;
-      /** Whole degrees, no unit attached. The component draws the ° mark. */
-      degrees: string;
-      condition: string;
-    }
-  | { key: "movement"; kind: "rings"; label: string; rings: ContextRing[] }
-  | { key: "screen"; kind: "duration"; label: string; value: string };
-
-/**
- * Ring goals. Exported because the ring is only honest if the number printed
- * beside it and the sweep drawn for it come from the same figure.
- *
- * 10,000 steps is the convention every step counter has trained people to read
- * as "a full day", so a full ring needs no legend.
- *
- * 3km is a deliberately MODEST bar rather than the distance 10,000 steps covers
- * (which is ~7.3km at device-stub's 1370 steps/km). The two rings measure the
- * same walking, so identical bars would draw the same sweep twice; different
- * bars let them say different things - "moved about as much as usual" and "hit
- * a full day's steps".
- *
- * The cost is that it saturates early: of device-stub's four presets only
- * `rain` (2.4km) leaves this ring partial, and the other three peg it at 100%.
- * If the distance ring should discriminate between demo scenarios rather than
- * mostly read as done, this wants to be ~7km.
- */
-export const STEP_GOAL = 10_000;
-export const DISTANCE_GOAL_KM = 3;
-
-export function contextWidgets(context: DailyContextStats, lang: Lang): ContextWidget[] {
-  const t = translator(lang);
-  return [
-    {
-      key: "weather",
-      kind: "weather",
-      label: t("context.weather"),
-      glyph: WEATHER_GLYPHS[context.weather],
-      degrees: toWholeDegrees(context.temperatureC),
-      condition: weatherLabel(context.weather, lang),
-    },
-    {
-      key: "movement",
-      kind: "rings",
-      label: t("context.movement"),
-      rings: [
-        {
-          key: "steps",
-          label: t("context.steps"),
-          value: groupThousands(context.steps),
-          unit: t("context.unit.steps"),
-          ratio: ringRatio(context.steps, STEP_GOAL),
-          goal: groupThousands(STEP_GOAL),
-        },
-        {
-          key: "distance",
-          label: t("context.distance"),
-          value: toTenth(context.distanceKm),
-          unit: t("context.unit.km"),
-          ratio: ringRatio(context.distanceKm, DISTANCE_GOAL_KM),
-          goal: toTenth(DISTANCE_GOAL_KM),
-        },
-      ],
-    },
-    {
-      // No unit: "3시간 14분" already contains its own, and appending one
-      // would produce "3시간 14분 분".
-      key: "screen",
-      kind: "duration",
-      label: t("context.screen"),
-      value: screenTimeText(context.screenTimeMinutes, lang),
-    },
-  ];
 }
 
 
