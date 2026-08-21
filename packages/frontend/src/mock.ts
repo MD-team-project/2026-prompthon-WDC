@@ -24,6 +24,7 @@
 import type {
   Character,
   ChatMessage,
+  DailyContextStats,
   DeviceStats,
   Lang,
   Skill,
@@ -78,6 +79,34 @@ const deviceState: Record<string, DeviceStats> = {
     observedAt: "2026-08-20T09:00:00Z",
   },
 };
+
+/**
+ * Today's context, mirroring device-stub's presets so the mock and the real
+ * backend tell the same stories (see `dailyContext.ts` there). `rain` is the
+ * default in both, for the same reason: it agrees with the seeded history
+ * rather than arguing with it.
+ *
+ * Switchable at runtime through `__mock.context(...)` below, which is what
+ * makes the three recommendation stories rehearsable without a backend.
+ */
+const CONTEXT_SCENARIOS = {
+  rain: { weather: "rain", temperatureC: 24, steps: 3_280, distanceKm: 2.4, screenTimeMinutes: 194 },
+  walk: { weather: "clear", temperatureC: 27, steps: 14_260, distanceKm: 10.4, screenTimeMinutes: 62 },
+  screen: { weather: "cloudy", temperatureC: 22, steps: 4_150, distanceKm: 3.0, screenTimeMinutes: 268 },
+  clear: { weather: "clear", temperatureC: 26, steps: 6_900, distanceKm: 5.0, screenTimeMinutes: 88 },
+} as const satisfies Record<string, Omit<DailyContextStats, "observedAt">>;
+
+type ContextScenario = keyof typeof CONTEXT_SCENARIOS;
+
+let contextScenario: ContextScenario = "rain";
+
+/** Triggered, not scheduled - same reasoning as the failure triggers below. */
+let contextShouldFail = false;
+
+/** `observedAt` is stamped at read time, so it is never a timestamp from last week. */
+function currentContext(): DailyContextStats {
+  return { ...CONTEXT_SCENARIOS[contextScenario], observedAt: new Date().toISOString() };
+}
 
 const skills: Record<string, Skill[]> = {
   pral: [],
@@ -276,6 +305,12 @@ export function createMockClient(getLang: GetLang): ApiClient {
       return structuredClone(state);
     },
 
+    async getTodayContext() {
+      await wait(LATENCY_MS);
+      if (contextShouldFail) throw new Error("mock context failure trigger");
+      return currentContext();
+    },
+
     async listSkills(characterId) {
       await wait(LATENCY_MS);
       return structuredClone(skills[characterId] ?? []);
@@ -419,6 +454,19 @@ export function createMockClient(getLang: GetLang): ApiClient {
           handlers.onAnnouncement(
             structuredClone(scriptedDiscoveries[index]!.event),
           ),
+        // Today's context has no push channel, so switching the scenario only
+        // shows up on the next fetch - go back to the roster and re-enter a
+        // character (`App.tsx` refetches on select). Deliberately not wired to
+        // an SSE event: BE has no such event either, and inventing one here
+        // would make the mock the more capable of the two.
+        context: (scenario: ContextScenario = "rain") => {
+          contextScenario = scenario in CONTEXT_SCENARIOS ? scenario : "rain";
+          contextShouldFail = false;
+          return currentContext();
+        },
+        contextFail: (on = true) => {
+          contextShouldFail = on;
+        },
         drop: () => {
           handlers.onDrop();
           // Recovers on its own, so the banner clearing itself is observable too.

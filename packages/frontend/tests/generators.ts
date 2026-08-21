@@ -10,6 +10,7 @@
  */
 
 import fc from 'fast-check';
+import type { DailyContextStats } from '@prompthon/shared';
 import { INPUT_MAX_LENGTH } from '../src/pure';
 
 const koWords = ['운동화', '건조', '30분만', '해줘', '지금', '너무', '일러', '평일', '저녁으로', '바꿔줘'];
@@ -83,3 +84,38 @@ export const attributeKey = (): fc.Arbitrary<string> =>
       .array(fc.constantFrom('a', 'B', 'c', '_', '-', '9'), { minLength: 1, maxLength: 12 })
       .map((chars) => chars.join('')),
   );
+
+/**
+ * Numbers the daily-context formatters have to survive.
+ *
+ * PBT-07 again: a bare `fc.double()` here would spend most of its runs on
+ * values no health app produces. What matters is the plausible range, the
+ * boundaries around a comma group and an hour, and the non-finite values that
+ * arrive when a field is missing from a response - the formatters have explicit
+ * fallbacks for those, and an untested fallback is how "NaN" reaches a screen.
+ */
+export const readingNumber = (): fc.Arbitrary<number> =>
+  fc.oneof(
+    { weight: 6, arbitrary: fc.integer({ min: 0, max: 40_000 }) },
+    { weight: 2, arbitrary: fc.double({ min: 0, max: 40, noNaN: true }) },
+    // Comma-group and hour boundaries, plus the values a rounding bug lands on.
+    { weight: 2, arbitrary: fc.constantFrom(0, 1, 9, 10, 59, 60, 61, 99, 100, 999, 1_000, 1_001, 9_999, 10_000, 999_999, 1_000_000) },
+    { weight: 1, arbitrary: fc.constantFrom(0.04, 0.05, 0.949, 0.95, 59.5, 1_000.5) },
+    { weight: 1, arbitrary: fc.integer({ min: -5_000, max: -1 }) },
+    { weight: 1, arbitrary: fc.constantFrom(Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY) },
+  );
+
+/** Well-formed readings, as `/api/context/today` actually returns them. */
+export const dailyContext = (): fc.Arbitrary<DailyContextStats> =>
+  fc.record({
+    weather: fc.constantFrom('clear' as const, 'rain' as const, 'cloudy' as const, 'snow' as const),
+    // Signed, and wider than Seoul gets: the widget prints this as a headline
+    // figure, so a negative reading has to survive rounding rather than lose
+    // its sign somewhere between -1 and 0.
+    temperatureC: fc.double({ min: -30, max: 45, noNaN: true }),
+    steps: fc.integer({ min: 0, max: 40_000 }),
+    distanceKm: fc.double({ min: 0, max: 40, noNaN: true }),
+    // 0 to a full day. 1440 is the only real cap on screen time.
+    screenTimeMinutes: fc.integer({ min: 0, max: 1_440 }),
+    observedAt: fc.constantFrom('2026-08-21T09:00:00Z', '2026-08-21T23:59:59+09:00'),
+  });

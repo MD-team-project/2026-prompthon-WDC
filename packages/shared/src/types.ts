@@ -56,6 +56,37 @@ export interface DeviceStats {
   observedAt: string;
 }
 
+export type WeatherCondition = 'clear' | 'rain' | 'cloudy' | 'snow';
+
+/**
+ * Today's readings from the mocked phone-side integrations - weather, the
+ * health app's movement figures, screen time. Not device state, and not
+ * per-character: one user, one reading, the same one behind every character.
+ *
+ * TYPED, where `DeviceStats` above is a generic `StatAttribute[]`, and the
+ * difference is not an inconsistency. Device attributes are per-product and BE
+ * owns the vocabulary, so FE renders whatever arrives in whatever order. These
+ * four fields are fixed by which integrations exist, and each needs its own
+ * formatting to read as anything - `14260` is not a step count until it is
+ * "14,260 걸음", and `194` is not phone time until it is "3시간 14분". A
+ * generic renderer would show four bare numbers, so there is nothing for it to
+ * buy here.
+ *
+ * These are displayed to the user because they are the REASON the character
+ * gives for a suggestion. "It rained and you were on your phone for three
+ * hours, so let's do the neck course" is only checkable if the user can see
+ * the same three hours the character read.
+ */
+export interface DailyContextStats {
+  weather: WeatherCondition;
+  /** Degrees Celsius. Signed - winter readings are legitimately negative. */
+  temperatureC: number;
+  steps: number;
+  distanceKm: number;
+  screenTimeMinutes: number;
+  observedAt: string;
+}
+
 export type SkillTier = 'basic' | 'advanced';
 
 export type SkillStatus = 'active' | 'retired';

@@ -8,10 +8,23 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { ActionResponse, Character, Skill, SkillDiscoveredEvent } from '@prompthon/shared';
+import type {
+  ActionResponse,
+  Character,
+  DailyContextStats,
+  Skill,
+  SkillDiscoveredEvent,
+} from '@prompthon/shared';
 import { initialState, reducer, activeSkills, statsFor, unseenTotalExcept, type State } from '../src/state';
 import { isSendable, normalizeInput, resolveLabel } from '../src/pure';
-import { attributeLabel, attributeValue } from '../src/strings';
+import {
+  attributeLabel,
+  attributeValue,
+  contextWidgets,
+  DISTANCE_GOAL_KM,
+  STEP_GOAL,
+  weatherGlyph,
+} from '../src/strings';
 
 const shoecase: Character = {
   id: 'shoecase',
@@ -352,6 +365,114 @@ describe('generic attribute rendering', () => {
     expect(attributeValue('dry', 'ko')).toBe('건조');
     // An unknown value passes through, for the same reason unknown keys do.
     expect(attributeValue('turbo', 'ko')).toBe('turbo');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Today's context: the reason behind a recommendation, shown to the user.
+// ---------------------------------------------------------------------------
+
+describe("today's context", () => {
+  const rainyDay: DailyContextStats = {
+    weather: 'rain',
+    temperatureC: 24,
+    steps: 3_280,
+    distanceKm: 2.394,
+    screenTimeMinutes: 194,
+    observedAt: '2026-08-21T09:00:00Z',
+  };
+
+  /** Narrowing helper - the widgets are a union, so a lookup by key is not enough. */
+  const widgetsOf = (context: DailyContextStats, lang: 'ko' | 'en' = 'ko') => {
+    const widgets = contextWidgets(context, lang);
+    const weather = widgets.find((w) => w.kind === 'weather')!;
+    const movement = widgets.find((w) => w.kind === 'rings')!;
+    const screen = widgets.find((w) => w.kind === 'duration')!;
+    return { weather, movement, screen };
+  };
+
+  it('formats each reading so it reads as the figure it is', () => {
+    const { weather, movement, screen } = widgetsOf({ ...rainyDay, steps: 14_260 });
+
+    expect(weather.degrees).toBe('24');
+    expect(weather.condition).toBe('비');
+
+    const [steps, distance] = movement.rings;
+    // Grouped, because "14260 걸음" is a number and "14,260 걸음" is a day's walking.
+    expect(steps.value).toBe('14,260');
+    expect(steps.unit).toBe('걸음');
+    expect(distance.value).toBe('2.4');
+    expect(distance.unit).toBe('km');
+
+    // 194 minutes is three and a bit hours, and that is how phone time is felt.
+    expect(screen.value).toBe('3시간 14분');
+  });
+
+  it('drops the hours part below an hour, in both languages', () => {
+    const brief = { ...rainyDay, screenTimeMinutes: 48 };
+    expect(widgetsOf(brief, 'ko').screen.value).toBe('48분');
+    expect(widgetsOf(brief, 'en').screen.value).toBe('48m');
+  });
+
+  it('fills the step ring at 10,000 and the distance ring at 3km', () => {
+    // The goals are what make the rings readable, so they are asserted rather
+    // than left to whatever the constants happen to be.
+    expect(STEP_GOAL).toBe(10_000);
+    expect(DISTANCE_GOAL_KM).toBe(3);
+
+    const half = widgetsOf({ ...rainyDay, steps: 5_000, distanceKm: 1.5 }).movement.rings;
+    expect(half[0].ratio).toBeCloseTo(0.5);
+    expect(half[1].ratio).toBeCloseTo(0.5);
+
+    // Past the goal the ring is full, not overflowing - the exact figure is
+    // printed beside it, so a second lap would say nothing and draw over the first.
+    const over = widgetsOf({ ...rainyDay, steps: 14_260, distanceKm: 10.4 }).movement.rings;
+    expect(over[0].ratio).toBe(1);
+    expect(over[1].ratio).toBe(1);
+  });
+
+  it('states a below-zero temperature as below zero', () => {
+    // A winter reading is the one case where the sign carries the whole meaning.
+    expect(widgetsOf({ ...rainyDay, temperatureC: -8.4 }).weather.degrees).toBe('-8');
+  });
+
+  it('gives the HUD button todayed weather as its icon', () => {
+    // The button that opens the sheet is labelled by the reading it stands for,
+    // so this glyph and the one inside the sheet have to be the same one.
+    expect(weatherGlyph('rain')).toBe(widgetsOf(rainyDay).weather.glyph);
+  });
+
+  it('is held once, not per character', () => {
+    let state = loaded();
+    state = reducer(state, { type: 'context/loaded', context: rainyDay });
+
+    // Switching character does not touch it: one user, one phone, one reading.
+    state = reducer(state, { type: 'character/select', characterId: 'pral' });
+    expect(state.dailyContext).toEqual(rainyDay);
+    expect(state.contextFailed).toBe(false);
+  });
+
+  it('keeps the last good reading when a refetch fails', () => {
+    let state = reducer(loaded(), { type: 'context/loaded', context: rainyDay });
+    state = reducer(state, { type: 'context/failed' });
+
+    // Blanking it would read as "you didn't move today", which is a claim the
+    // failure never made.
+    expect(state.dailyContext).toEqual(rainyDay);
+    expect(state.contextFailed).toBe(true);
+  });
+
+  it('reports a first-load failure as a failure, not as still loading', () => {
+    const state = reducer(loaded(), { type: 'context/failed' });
+    expect(state.dailyContext).toBeNull();
+    expect(state.contextFailed).toBe(true);
+  });
+
+  it('never lands in the device panel', () => {
+    // FE-R-1's neighbour: a phone reading and a device reading have separate
+    // destinations, and there is no action that can put one in the other's slot.
+    const state = reducer(loaded(), { type: 'context/loaded', context: rainyDay });
+    expect(statsFor(state, 'shoecase')).toBeNull();
   });
 });
 

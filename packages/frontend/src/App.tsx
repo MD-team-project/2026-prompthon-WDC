@@ -17,7 +17,7 @@
  *          user is not viewing, and the roster badge depends on exactly that.
  */
 
-import { useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import type { Lang } from '@prompthon/shared';
 import { createApiClient } from './api';
 import { isSendable, normalizeInput } from './pure';
@@ -113,8 +113,32 @@ export function App() {
     };
   }, [api]);
 
+  /**
+   * Today's context, fetched once here rather than on the character screen.
+   *
+   * There is one reading for one user, so a per-screen fetch would be three
+   * requests for one value - and the panel would be empty for a moment every
+   * time the user switched character, which reads as the data having changed.
+   */
+  const loadContext = useCallback(() => {
+    api
+      .getTodayContext()
+      .then((context) => dispatch({ type: 'context/loaded', context }))
+      // Deliberately no `action/failed`: this is a background reading, not
+      // something the user asked for, and a chat line saying it failed would be
+      // the character apologising for something the user never requested. The
+      // panel says so itself instead.
+      .catch(() => dispatch({ type: 'context/failed' }));
+  }, [api]);
+
+  useEffect(loadContext, [loadContext]);
+
   const selectCharacter = (characterId: string) => {
     dispatch({ type: 'character/select', characterId });
+    // Refetched on open because BE has no push channel for it and the demo
+    // switches the reading between takes (device-stub's `/context/today`).
+    // Opening a character is the natural moment to catch up.
+    loadContext();
     Promise.all([api.getDeviceState(characterId), api.listSkills(characterId)])
       .then(([deviceStats, skills]) =>
         dispatch({ type: 'character/detailLoaded', characterId, deviceStats, skills }),
@@ -255,6 +279,8 @@ export function App() {
           characters={state.characters}
           lang={state.lang}
           deviceStats={statsFor(state, character.id)}
+          dailyContext={state.dailyContext}
+          contextFailed={state.contextFailed}
           messages={messagesFor(state, character.id)}
           skills={activeSkills(state, character.id)}
           unseen={state.unseen}

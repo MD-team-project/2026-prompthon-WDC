@@ -45,16 +45,24 @@ export interface UsageEvent {
   params: Record<string, unknown>;
 }
 
+export const WEATHER_CONDITIONS = ["clear", "rain", "cloudy", "snow"] as const;
+export type WeatherCondition = (typeof WEATHER_CONDITIONS)[number];
+
 /**
- * Daily app-level context - not device data, and not product-scoped (one
- * hardcoded demo user, so one record per day covers every product).
- * Mocked: no real GPS/weather/screen-time integration exists. Sensitive
- * class, same as UsageEvent - discovery-only, never leaves the backend.
+ * One past day's app-level context - not device data, and not product-scoped
+ * (one hardcoded demo user, so one record per day covers every product).
+ * Mocked: no real weather / health-app / screen-time integration exists.
+ *
+ * ACCUMULATED HISTORY of these is the sensitive class, same as UsageEvent -
+ * `data/appContext.ts`'s 60-day window is discovery-only and never leaves the
+ * backend. `DailyContext` below is the deliberate exception and explains why.
  */
 export interface AppContextEvent {
-  date: string; // "YYYY-MM-DD"
+  date: string; // "YYYY-MM-DD", local date - see DailyContext
   distanceKm: number;
-  weather: "clear" | "rain" | "cloudy" | "snow";
+  /** Health-app step count for the day. Coherent with `distanceKm`. */
+  steps: number;
+  weather: WeatherCondition;
   screenTimeMinutes: number;
 }
 
@@ -71,6 +79,42 @@ export interface Bilingual {
  * recurring pattern (a fixed routine the character can run on command).
  */
 export type SkillKind = "buff" | "action";
+
+/**
+ * TODAY's single live reading of the same three mocked integrations, served by
+ * device-stub (`GET /context/today`) rather than read out of stored history.
+ *
+ * Unlike the 60-day window this one IS user-facing: it is exposed to the
+ * frontend (`GET /api/context/today`) and to the control agent. That is not a
+ * loosening of FR-5.11 - what FR-5.11 protects is accumulated usage history
+ * and the routines derived from it. Today's weather, today's step count and
+ * today's phone time are the user's own current readings, shown back to the
+ * person they belong to, which is what makes "it's raining, your neck will be
+ * stiff" legible as a reason instead of arriving as an unexplained suggestion.
+ * The history stays where it was.
+ *
+ * `date` is the LOCAL date, not the UTC slice of `observedAt` - "today's
+ * steps" has to mean the user's today, and a KST early-morning reading would
+ * land on yesterday under UTC.
+ *
+ * `temperatureC` is here and NOT on `AppContextEvent`, which is the one field
+ * that differs between today and a stored day. It is a display concern: the
+ * weather widget reads as a weather widget because it leads with a
+ * temperature, where `weather: "rain"` alone is a category. Discovery never
+ * needs it - it correlates on the CONDITION, and a degree value would only
+ * add a near-continuous dimension for it to find spurious patterns in. Adding
+ * it to `AppContextEvent` would also have made every seeded fixture row
+ * (`fixtures/app-context-*.jsonl`) missing a required field.
+ */
+export interface DailyContext extends AppContextEvent {
+  observedAt: string;
+  /** Degrees Celsius. Signed - winter readings are legitimately negative. */
+  temperatureC: number;
+}
+
+export function isWeatherCondition(value: string): value is WeatherCondition {
+  return (WEATHER_CONDITIONS as readonly string[]).includes(value);
+}
 
 /**
  * A discovered skill is a Markdown document describing a new feature or mode,

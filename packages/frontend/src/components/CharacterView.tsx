@@ -13,9 +13,15 @@
  *                  moves anything else on this screen, HUD included.
  *   stage-wrap     the character, flex:1. Level-up and speech happen here
  *   switcher       the other two characters, one tap away
- *   stat-panel     device state, grouped into one panel - always here
+ *   stat-panel     device state, always here
  *   input-bar      voice first, text beneath
- *   + sheets       conversation log, skill compendium - raised, not routed
+ *   + sheets       conversation log, skill compendium, today's readings -
+ *                  raised, not routed. All three rise from the bottom
+ *
+ * Today's readings (weather, steps, distance, screen time) used to be a second
+ * panel above device state. They cost a row of the one budget that matters here
+ * and are reference material rather than live state, so they moved behind the
+ * HUD's weather button - see the note on it below.
  *
  * Previously `.speech` was the only region with `flex: 1` and the character sat
  * in a fixed 176px band above it, which made the screen a chat client with an
@@ -34,12 +40,21 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { Character, ChatMessage, DeviceStats, Lang, Skill } from '@prompthon/shared';
+import type {
+  Character,
+  ChatMessage,
+  DailyContextStats,
+  DeviceStats,
+  Lang,
+  Skill,
+} from '@prompthon/shared';
+// `neighbourId` is gone with swipe navigation - switching is switcher-only now.
 import { progressRatio } from '../pure';
 import type { MicStatus } from '../state';
-import type { translator } from '../strings';
+import { weatherGlyph, type translator } from '../strings';
 import { CharacterStage } from './CharacterStage';
 import { CharacterSwitcher } from './CharacterSwitcher';
+import { ContextSheet } from './ContextSheet';
 import { DeviceStatStrip } from './DeviceStatStrip';
 import { InputBar } from './InputBar';
 import { SkillCompendium } from './SkillCompendium';
@@ -51,6 +66,9 @@ interface Props {
   characters: Character[];
   lang: Lang;
   deviceStats: DeviceStats | null;
+  /** Not per-character - one user, one reading. See `ContextSheet`. */
+  dailyContext: DailyContextStats | null;
+  contextFailed: boolean;
   messages: ChatMessage[];
   skills: Skill[];
   unseen: Record<string, number>;
@@ -99,6 +117,15 @@ export function CharacterView(props: Props) {
   const slideTokenRef = useRef(0);
   const [slide, setSlide] = useState<{ token: number; direction: 1 | -1 } | null>(null);
 
+  /*
+   * Local, not in the reducer, unlike the log and compendium sheets. Those are
+   * per-character and their open state is something the rest of the app reasons
+   * about; today's readings are one user's single reading, shared by every
+   * character, and nothing outside this component needs to know whether the
+   * sheet is up.
+   */
+  const [contextOpen, setContextOpen] = useState(false);
+
   useEffect(() => {
     if (prevCharacterIdRef.current === character.id) return;
     prevCharacterIdRef.current = character.id;
@@ -129,24 +156,59 @@ export function CharacterView(props: Props) {
   return (
     <div className="character" data-product={character.productId}>
       <header className="hud">
-        <button
-          type="button"
-          className="hud-button"
-          onClick={props.onBack}
-          aria-label={t('character.back')}
-          data-testid="character-back-button"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-          {/* FE-R-28: the badge follows onto the back control, so a discovery
-              elsewhere is visible without leaving this screen. */}
-          {props.unseenElsewhere > 0 ? (
-            <span className="badge badge-corner tnum" data-testid="character-back-badge">
-              {props.unseenElsewhere}
+        <div className="hud-left">
+          <button
+            type="button"
+            className="hud-button"
+            onClick={props.onBack}
+            aria-label={t('character.back')}
+            data-testid="character-back-button"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+            {/* FE-R-28: the badge follows onto the back control, so a discovery
+                elsewhere is visible without leaving this screen. */}
+            {props.unseenElsewhere > 0 ? (
+              <span className="badge badge-corner tnum" data-testid="character-back-badge">
+                {props.unseenElsewhere}
+              </span>
+            ) : null}
+          </button>
+
+          {/*
+            Today's readings live behind this, in the HUD rather than in a strip
+            above the input bar. The strip cost a row of a screen where
+            `.stage-wrap` is the only region with height to give, and the
+            readings are reference material - the character states the figure it
+            acted on in what it says, so the panel does not have to be permanently
+            open for the suggestion to be checkable.
+
+            Today's weather as the icon, so the control is not a neutral glyph:
+            the one reading that needs no unit doubles as the affordance.
+
+            Disabled rather than hidden while there is nothing to show. FE-R-19
+            wants a failure to say so, and a control that quietly disappears on
+            failure looks identical to one that was never there.
+          */}
+          <button
+            type="button"
+            className="hud-button hud-button-glyph"
+            onClick={() => setContextOpen(true)}
+            disabled={props.dailyContext === null}
+            aria-haspopup="dialog"
+            aria-label={
+              props.dailyContext === null
+                ? t(props.contextFailed ? 'context.unavailable' : 'context.none')
+                : t('context.detail')
+            }
+            data-testid="character-context-toggle"
+          >
+            <span aria-hidden="true">
+              {props.dailyContext === null ? '⋯' : weatherGlyph(props.dailyContext.weather)}
             </span>
-          ) : null}
-        </button>
+          </button>
+        </div>
 
         <div className="hud-id">
           <span className="hud-name">{character.name}</span>
@@ -241,6 +303,11 @@ export function CharacterView(props: Props) {
         </div>
       ) : null}
 
+      {/*
+        Device state only. Today's readings used to sit in a wrapper above this
+        one; they moved into the HUD button, so the wrapper is gone and this
+        panel is back to carrying its own margin.
+      */}
       <DeviceStatStrip
         deviceStats={props.deviceStats}
         pending={props.pending}
@@ -273,6 +340,19 @@ export function CharacterView(props: Props) {
           lang={props.lang}
           t={t}
           onClose={() => props.onToggleCompendium(false)}
+        />
+      ) : null}
+
+      {/* Rises from the bottom like the other two, even though its button is in
+          the HUD - so does the compendium's. Where a sheet enters from is this
+          app's one sheet gesture, not a pointer back to the control that opened
+          it. */}
+      {contextOpen && props.dailyContext !== null ? (
+        <ContextSheet
+          context={props.dailyContext}
+          lang={props.lang}
+          t={t}
+          onClose={() => setContextOpen(false)}
         />
       ) : null}
     </div>
