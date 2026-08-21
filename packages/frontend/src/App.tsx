@@ -325,8 +325,6 @@ export function App() {
           characters={state.characters}
           lang={state.lang}
           deviceStats={statsFor(state, character.id)}
-          dailyContext={state.dailyContext}
-          contextFailed={state.contextFailed}
           onSetScenario={setScenario}
           messages={messagesFor(state, character.id)}
           skills={activeSkills(state, character.id)}

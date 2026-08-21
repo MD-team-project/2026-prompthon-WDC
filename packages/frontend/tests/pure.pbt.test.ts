@@ -23,8 +23,8 @@ import {
   toTenth,
   toWholeDegrees,
 } from '../src/pure';
-import { contextWidgets, screenTimeText, strings, weatherGlyph } from '../src/strings';
-import { attributeKey, chatText, dailyContext, expPair, readingNumber } from './generators';
+import { strings } from '../src/strings';
+import { attributeKey, chatText, expPair, readingNumber } from './generators';
 
 describe('normalizeInput', () => {
   // Idempotence. The property that caught the real bug: without the trailing
@@ -222,74 +222,6 @@ describe('toWholeDegrees', () => {
         const text = toWholeDegrees(value);
         expect(text).not.toContain('NaN');
         expect(text).toBe(Number.isFinite(value) ? String(Math.round(value)) : '-');
-      }),
-    );
-  });
-});
-
-describe('contextWidgets', () => {
-  it('always yields the three widgets, in a stable order, none blank', () => {
-    fc.assert(
-      fc.property(dailyContext(), fc.constantFrom('ko' as const, 'en' as const), (context, lang) => {
-        const widgets = contextWidgets(context, lang);
-        // Three fixed groupings over four integrations - a reading that silently
-        // went missing would leave the character citing a figure nothing shows.
-        expect(widgets.map((w) => w.key)).toEqual(['weather', 'movement', 'screen']);
-
-        for (const widget of widgets) {
-          expect(widget.label.length).toBeGreaterThan(0);
-
-          // Every rendered string, whatever shape the widget is. Checked through
-          // the union rather than over a common `value` field, because there
-          // isn't one - that is the point of the union.
-          const texts =
-            widget.kind === 'weather'
-              ? [widget.degrees, widget.condition]
-              : widget.kind === 'duration'
-                ? [widget.value]
-                : widget.rings.flatMap((r) => [r.label, r.value, r.unit, r.goal]);
-
-          for (const text of texts) {
-            expect(text.length).toBeGreaterThan(0);
-            expect(text).not.toContain('NaN');
-            expect(text).not.toContain('undefined');
-          }
-
-          if (widget.kind === 'rings') {
-            expect(widget.rings.map((r) => r.key)).toEqual(['steps', 'distance']);
-            for (const ring of widget.rings) {
-              expect(ring.ratio).toBeGreaterThanOrEqual(0);
-              expect(ring.ratio).toBeLessThanOrEqual(1);
-            }
-          }
-        }
-      }),
-    );
-  });
-
-  it('has a glyph for every weather condition', () => {
-    fc.assert(
-      fc.property(
-        fc.constantFrom('clear' as const, 'rain' as const, 'cloudy' as const, 'snow' as const),
-        (weather) => {
-          // The HUD button renders this as its only visible content, so a missing
-          // entry would leave the control looking empty rather than mislabelled.
-          expect(weatherGlyph(weather).length).toBeGreaterThan(0);
-        },
-      ),
-    );
-  });
-
-  it('states the screen time in whichever language is active', () => {
-    fc.assert(
-      fc.property(dailyContext(), (context) => {
-        const { hours, minutes } = splitDuration(context.screenTimeMinutes);
-        expect(screenTimeText(context.screenTimeMinutes, 'ko')).toBe(
-          hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`,
-        );
-        expect(screenTimeText(context.screenTimeMinutes, 'en')).toBe(
-          hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
-        );
       }),
     );
   });
