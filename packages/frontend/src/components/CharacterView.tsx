@@ -332,7 +332,6 @@ export function CharacterView(props: Props) {
 
       <InputBar
         draft={props.draft}
-        micStatus={props.micStatus}
         feedbackSkill={props.feedbackSkill}
         t={t}
         onDraftChange={props.onDraftChange}

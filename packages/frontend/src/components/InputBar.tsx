@@ -1,32 +1,17 @@
 /**
  * Input, pinned and present in every state.
  *
- * Voice is the wide bar and text is the compact row beneath it, because that is
- * the order the product argues for: you say what you want, and typing is the
- * fallback. The old layout had them the other way round, with voice as a small
- * round button beside a text field.
- *
- * The bar is tap-to-start, tap-to-finish rather than press-and-hold. Hold would
- * read better, but `getUserMedia` resolves asynchronously, so a quick release
- * can land while `micStatus` is still `idle` and start a second recorder. A
- * duplicated recorder on stage is worse than a less tactile affordance.
- *
- * FE-R-22: there is no audio output path. The bar visualises input only, and
- * nothing here plays a sound - which is also why the level-up and discovery
- * effects are silent.
+ * Voice is a small icon button after send, not the wide labelled bar it used
+ * to be - a shell for now. It still calls `onVoice`, but nothing here shows
+ * recording/transcribing/unavailable as separate visual states any more; that
+ * polish (and BE's actual /api/transcribe route) is later work, and this
+ * button is the placeholder it will land back on.
  *
  * FE-R-23: trim, reject empty, cap length with the cap visible as it approaches.
  * Client-side validation here is user experience. The trust boundary is BE's and
  * BE validates independently - this cap is not a security control and is not
  * treated as one. There is no prompt-injection guard here for the same reason:
  * NFR-1.4 is a trust-boundary control and a browser is not a trust boundary.
- *
- * FE-R-20: with the mic unavailable the bar is replaced by a single line that
- * says so, and the text path is untouched. Voice is first in the drop order, so
- * it is an addition to the text path rather than a second input path.
- *
- * FE-R-21: a transcript arrives in `draft` as an editable value, not as a
- * dispatch. Stage misrecognition becomes recoverable rather than merely legible.
  *
  * FE-R-30: the feedback context badge shows which skill the next message is
  * about. The user still writes only natural language.
@@ -35,14 +20,9 @@
 import type { Skill } from '@prompthon/shared';
 import { INPUT_MAX_LENGTH, INPUT_WARN_AT, inputLength, isSendable } from '../pure';
 import type { translator } from '../strings';
-import type { MicStatus } from '../state';
-
-/** Deterministic so the waveform does not reshuffle on every render. */
-const WAVE_BARS = Array.from({ length: 28 }, (_, index) => index);
 
 interface Props {
   draft: string;
-  micStatus: MicStatus;
   feedbackSkill: Skill | null;
   t: ReturnType<typeof translator>;
   onDraftChange: (draft: string) => void;
@@ -53,7 +33,6 @@ interface Props {
 
 export function InputBar({
   draft,
-  micStatus,
   feedbackSkill,
   t,
   onDraftChange,
@@ -63,16 +42,6 @@ export function InputBar({
 }: Props) {
   const length = inputLength(draft);
   const sendable = isSendable(draft);
-  const recording = micStatus === 'recording';
-
-  const micLabel =
-    micStatus === 'unavailable'
-      ? t('input.mic.unavailable')
-      : recording
-        ? t('input.mic.recording')
-        : micStatus === 'transcribing'
-          ? t('input.mic.transcribing')
-          : t('input.mic.start');
 
   return (
     <div className="input-bar">
@@ -91,45 +60,6 @@ export function InputBar({
           </button>
         </div>
       ) : null}
-
-      {micStatus === 'unavailable' ? (
-        <p className="voice-unavailable" data-testid="input-mic-unavailable">
-          {t('input.mic.unavailable')}
-        </p>
-      ) : (
-        <button
-          type="button"
-          className="voice-bar"
-          data-state={micStatus}
-          disabled={micStatus === 'transcribing'}
-          onClick={onVoice}
-          aria-label={micLabel}
-          data-testid="input-mic-button"
-        >
-          {recording ? (
-            <span className="voice-wave" aria-hidden="true">
-              {WAVE_BARS.map((index) => (
-                <i
-                  key={index}
-                  style={{
-                    animationDelay: `${(index % 7) * 0.06 + Math.floor(index / 7) * 0.02}s`,
-                    animationDuration: `${0.7 + (index % 5) * 0.08}s`,
-                  }}
-                />
-              ))}
-            </span>
-          ) : (
-            <span className="voice-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <rect x="9.5" y="3.5" width="5" height="10.5" rx="2.5" />
-                <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
-                <path d="M12 18v2.5" />
-              </svg>
-            </span>
-          )}
-          <span className="voice-label">{micLabel}</span>
-        </button>
-      )}
 
       <form
         className="input-row"
@@ -159,6 +89,20 @@ export function InputBar({
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M5 12h13M12 6l6 6-6 6" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          className="mic-button"
+          onClick={onVoice}
+          aria-label={t('input.mic.start')}
+          data-testid="input-mic-button"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9.5" y="3.5" width="5" height="10.5" rx="2.5" />
+            <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
+            <path d="M12 18v2.5" />
           </svg>
         </button>
       </form>
