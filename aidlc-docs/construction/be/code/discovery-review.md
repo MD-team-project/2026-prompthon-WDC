@@ -1,6 +1,6 @@
 # Skill Discovery Pipeline - Review for Audit
 
-**Status**: Implemented, live-tested against real Bedrock + Friendli credentials. Awaiting user confirmation before settling.
+**Status**: **SETTLED 2026-08-20T14:45:00Z**, at BE Code Generation approval. Implemented and live-tested against real Bedrock + Friendli credentials. Two items in here did not settle the way this review proposed and the differences are recorded in `be-summary.md` section 4 - SSE ended up carrying discovery output, and skill removal is a hard delete rather than a `status` transition.
 **Date**: 2026-08-20
 **Scope**: `discovery/graph.ts`, `discovery/trigger.ts`, `data/skills.ts`, `tools/skills.ts`, `agents/index.ts` (skill-related portion), `routes/skills.ts`, shared types (`SkillRecord`, `SkillSummary`, `ControlEvent`).
 
