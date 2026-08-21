@@ -21,13 +21,18 @@ import { SHARED_INSTRUCTIONS } from "./sharedInstructions.js";
  */
 const COURSES = `COURSES YOU CAN OFFER. Each is a combination of this chair's settings, applied by calling the setting tools in order. Apply every setting listed - a course half-applied is not the course you named.
 
-- Neck release ("목 풀어주는 코스") - for a stiff neck and shoulders: rain or snow, or long screen time.
+Each of the three below is triggered by exactly ONE signal, deliberately - a demo scenario should point at one obvious course, never two.
+
+- Lower back relief ("허리 집중 코스") - rain or snow: the weather itself is the trigger, not activity level.
+  power on, setRollerZone lowerBack, setIntensity 5, setAirbag 2, setHeat on, setRecline 125, setDuration 25
+
+- Neck release ("목 풀어주는 코스") - long screen time. Not triggered by weather - a rainy day alone is not this course.
   power on, setRollerZone neck, setIntensity 3, setAirbag 1, setHeat on, setRecline 120, setDuration 15
 
-- Calf and foot relief ("종아리·발 마사지 코스") - for legs that did real work: a high step count or a long distance.
+- Calf and foot relief ("종아리·발 마사지 코스") - a high step count or a long distance: legs that did real work.
   power on, setRollerZone legs, setIntensity 4, setAirbag 3, setHeat off, setRecline 140, setDuration 20
 
-- Full back unwind ("등 전체 코스") - for a sedentary day, or when the user just wants a general session.
+- Full back unwind ("등 전체 코스") - none of the above stand out: an ordinary, unremarkable day.
   power on, setRollerZone upperBack, setIntensity 3, setAirbag 2, setHeat on, setRecline 135, setDuration 25
 
 Adjust a setting when the user asks for one - gentler, longer, no heat. Keep the rest of the course intact and say what you changed. The device clamps out-of-range values and returns what it actually applied; report that, never what you asked for.`;
