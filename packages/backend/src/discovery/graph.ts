@@ -127,7 +127,12 @@ type DiscoveryStateValue = {
 const graph = new StateGraph(DiscoveryState)
   .addNode("loadWindow", async (state: DiscoveryStateValue) => {
     console.log(`[discovery:${state.productId}] loadWindow`);
-    publish(state.productId, { type: "discoveryProgress", productId: state.productId, phase: "started" });
+    publish(state.productId, {
+      type: "discoveryProgress",
+      productId: state.productId,
+      phase: "started",
+      node: "loadWindow",
+    });
     const events = readWindow(state.productId, 60);
 
     // Today's live reading is folded in so on-stage device events have a
@@ -146,10 +151,20 @@ const graph = new StateGraph(DiscoveryState)
   })
   .addNode("findPattern", async (state: DiscoveryStateValue) => {
     console.log(`[discovery:${state.productId}] findPattern`);
-    publish(state.productId, { type: "discoveryProgress", productId: state.productId, phase: "analysing" });
+    publish(state.productId, {
+      type: "discoveryProgress",
+      productId: state.productId,
+      phase: "analysing",
+      node: "findPattern",
+    });
 
     if (state.events.length === 0) {
-      publish(state.productId, { type: "discoveryProgress", productId: state.productId, phase: "noPattern" });
+      publish(state.productId, {
+        type: "discoveryProgress",
+        productId: state.productId,
+        phase: "noPattern",
+        node: "findPattern",
+      });
       return { found: false };
     }
 
@@ -179,14 +194,34 @@ const graph = new StateGraph(DiscoveryState)
       parsed = parseResponse(responseText);
     }
     if (!parsed) {
-      publish(state.productId, { type: "discoveryProgress", productId: state.productId, phase: "noPattern" });
+      publish(state.productId, {
+        type: "discoveryProgress",
+        productId: state.productId,
+        phase: "noPattern",
+        node: "findPattern",
+      });
       return { found: false };
     }
-    publish(state.productId, { type: "discoveryProgress", productId: state.productId, phase: "found" });
+    publish(state.productId, {
+      type: "discoveryProgress",
+      productId: state.productId,
+      phase: "found",
+      node: "findPattern",
+    });
     return { found: true, title: parsed.title, kind: parsed.kind, summary: parsed.summary, content: parsed.content };
   })
   .addNode("save", async (state: DiscoveryStateValue) => {
     console.log(`[discovery:${state.productId}] save`);
+    // The graph runs this node unconditionally (findPattern -> save has no
+    // conditional branch), so it deserves its own node event even on a
+    // noPattern run - the graph really did reach `save`, it just had
+    // nothing to persist.
+    publish(state.productId, {
+      type: "discoveryProgress",
+      productId: state.productId,
+      phase: state.found ? "found" : "noPattern",
+      node: "save",
+    });
     if (state.found && state.title && state.kind && state.summary && state.content) {
       const skill = await putSkill({
         productId: state.productId,
