@@ -175,6 +175,16 @@ const attributeLabels: Record<Lang, Record<string, string>> = {
     temperature: "온도",
     intensity: "강도",
     program: "프로그램",
+    // Keys from device-stub's per-product attribute schema
+    // (packages/device-stub/src/canned.ts).
+    uv: "UV 살균",
+    steam: "스팀",
+    shake: "흔들기",
+    durationMinutes: "시간",
+    rollerZone: "부위",
+    airbag: "에어백",
+    heat: "온열",
+    recline: "각도",
   },
   en: {
     power: "Power",
@@ -183,6 +193,14 @@ const attributeLabels: Record<Lang, Record<string, string>> = {
     temperature: "Temperature",
     intensity: "Intensity",
     program: "Program",
+    uv: "UV",
+    steam: "Steam",
+    shake: "Shake",
+    durationMinutes: "Duration",
+    rollerZone: "Zone",
+    airbag: "Airbag",
+    heat: "Heat",
+    recline: "Recline",
   },
 };
 
@@ -193,6 +211,14 @@ const attributeValues: Record<Lang, Record<string, string>> = {
     idle: "대기",
     care: "케어",
     massage: "마사지",
+    // setRollerZone's zones and Pra.L's start modes.
+    neck: "목",
+    upperBack: "등 위",
+    lowerBack: "허리",
+    legs: "다리",
+    standard: "표준",
+    quick: "빠르게",
+    deep: "집중",
   },
   en: {
     dry: "Dry",
@@ -200,6 +226,13 @@ const attributeValues: Record<Lang, Record<string, string>> = {
     idle: "Idle",
     care: "Care",
     massage: "Massage",
+    neck: "Neck",
+    upperBack: "Upper back",
+    lowerBack: "Lower back",
+    legs: "Legs",
+    standard: "Standard",
+    quick: "Quick",
+    deep: "Deep",
   },
 };
 

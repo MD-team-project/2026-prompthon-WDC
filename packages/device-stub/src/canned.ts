@@ -57,13 +57,76 @@ export function capabilitiesFor(productId: ProductId): Capability[] {
   return CAPABILITIES_BY_PRODUCT[productId];
 }
 
+/**
+ * One entry in a product's `attributes` schema.
+ *
+ * The shared `DeviceState` envelope fixes only `power` and leaves `attributes`
+ * as an unconstrained record, deliberately - this is where that record's shape
+ * is actually defined, per product. The capability list above cannot serve as
+ * that definition, for two reasons:
+ *
+ *  1. `key` is per CAPABILITY, not per param name. ShoeCase's `setUv {on}` and
+ *     `setSteam {on}` both carry a param called `on`, so merging by param name
+ *     collapsed two independent readings into one `attributes.on` where the
+ *     second command silently erased the first. Same collision for the massage
+ *     chair's `setIntensity {level}` and `setAirbag {level}`.
+ *  2. `default` is what a device that has never been commanded reports. Without
+ *     it `attributes` starts empty, and the first screen has nothing to show
+ *     but a loading line - where the honest reading is "off, nothing running".
+ */
+interface AttributeSpec {
+  /** Key inside `DeviceState.attributes`. Unique within a product. */
+  key: string;
+  capability: string;
+  /** Param name inside that capability's schema. */
+  param: string;
+  /** Resting value: what this reads as before anything has been commanded. */
+  default: string | number | boolean;
+}
+
+const SHOECASE_ATTRIBUTES: AttributeSpec[] = [
+  { key: "temperature", capability: "setTemperature", param: "celsius", default: 20 },
+  { key: "uv", capability: "setUv", param: "on", default: false },
+  { key: "steam", capability: "setSteam", param: "on", default: false },
+  { key: "shake", capability: "setShake", param: "level", default: 0 },
+  { key: "durationMinutes", capability: "setDuration", param: "minutes", default: 5 },
+];
+
+const MASSAGECHAIR_ATTRIBUTES: AttributeSpec[] = [
+  { key: "rollerZone", capability: "setRollerZone", param: "zone", default: "neck" },
+  { key: "intensity", capability: "setIntensity", param: "level", default: 1 },
+  { key: "airbag", capability: "setAirbag", param: "level", default: 0 },
+  { key: "heat", capability: "setHeat", param: "on", default: false },
+  { key: "recline", capability: "setRecline", param: "angle", default: 90 },
+  { key: "durationMinutes", capability: "setDuration", param: "minutes", default: 5 },
+];
+
+const PRAL_ATTRIBUTES: AttributeSpec[] = [
+  { key: "mode", capability: "start", param: "mode", default: "standard" },
+  { key: "durationMinutes", capability: "setDuration", param: "minutes", default: 5 },
+];
+
+const ATTRIBUTES_BY_PRODUCT: Record<ProductId, AttributeSpec[]> = {
+  shoecase: SHOECASE_ATTRIBUTES,
+  massagechair: MASSAGECHAIR_ATTRIBUTES,
+  pral: PRAL_ATTRIBUTES,
+};
+
+export function attributesFor(productId: ProductId): AttributeSpec[] {
+  return ATTRIBUTES_BY_PRODUCT[productId];
+}
+
 const state = new Map<ProductId, DeviceState>();
+
+function defaultAttributes(productId: ProductId): Record<string, unknown> {
+  return Object.fromEntries(attributesFor(productId).map((a) => [a.key, a.default]));
+}
 
 function fresh(productId: ProductId): DeviceState {
   return {
     productId,
     power: "off",
-    attributes: {},
+    attributes: defaultAttributes(productId),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -116,9 +179,15 @@ export function applyCommand(
     power = "off";
   } else {
     if (capability === "start") power = "on";
+    const schema = attributesFor(productId);
     for (const [key, rawValue] of Object.entries(params)) {
       const paramSpec = spec.params[key];
       if (!paramSpec) continue;
+      // The schema's key, not the param name - that is what keeps setUv and
+      // setSteam (both `on`) from overwriting each other. Falls back to the
+      // param name so a capability added without a schema entry still shows up
+      // rather than silently vanishing.
+      const stateKey = schema.find((a) => a.capability === capability && a.param === key)?.key ?? key;
       if (paramSpec.type === "number") {
         const requested = Number(rawValue);
         if (!Number.isFinite(requested)) return { error: `${key} must be a number` };
@@ -126,9 +195,9 @@ export function applyCommand(
         const max = paramSpec.max ?? Infinity;
         const applied = Math.min(Math.max(requested, min), max);
         if (applied !== requested) clamped = { param: key, requested, applied };
-        attributes[key] = applied;
+        attributes[stateKey] = applied;
       } else {
-        attributes[key] = rawValue;
+        attributes[stateKey] = rawValue;
       }
     }
   }

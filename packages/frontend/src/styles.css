@@ -47,6 +47,22 @@
   --danger: #a8382f;
   --danger-bg: #f7e7e5;
 
+  /*
+   * Powered-on green, for the device panel's power chip.
+   *
+   * Not a product accent: "on" has to mean the same colour on all three
+   * products, and `[data-product='massagechair']` is already a muted green - a
+   * product hue here would make "on" read as "chair".
+   *
+   * Dark enough (6.4:1 on white, 5.5:1 on its own tint) to be used for the
+   * value text as well as the border, the same way `--danger` is. The off state
+   * reuses `--danger`/`--danger-bg` rather than minting a near-identical brick
+   * red; that is a palette decision, not a claim that a powered-off device is a
+   * failure.
+   */
+  --power-on: #2f6a45;
+  --power-on-bg: #e6f0e8;
+
   --radius: 14px;
   --radius-lg: 20px;
 
@@ -1576,6 +1592,77 @@ svg {
   margin: 0;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/*
+ * The power chip states the device's power in colour as well as in words.
+ *
+ * Colour is never the only signal - the chip reads "전원 켜짐" / "전원 꺼짐"
+ * either way, so this is a second encoding rather than the carrier. That is what
+ * makes a saturated border acceptable in a panel whose whole job is to be
+ * trusted.
+ *
+ * 2px where other chips are 1.5px, and the bevel picks up the same hue: the
+ * point of the border is to be seen from across the room during a demo, and a
+ * 1.5px line in a muted palette is not.
+ */
+.stat-chip[data-power='on'],
+.stat-chip[data-power='off'] {
+  border-width: 2px;
+}
+
+.stat-chip[data-power='on'] {
+  border-color: var(--power-on);
+  background: var(--power-on-bg);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--power-on) 30%, transparent);
+}
+
+.stat-chip[data-power='on'] dd {
+  color: var(--power-on);
+}
+
+.stat-chip[data-power='off'] {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.stat-chip[data-power='off'] dd {
+  color: var(--danger);
+}
+
+/*
+ * Power off: every chip but `power` itself recedes.
+ *
+ * Four cues at once, because one was too quiet to notice at a glance - sunken
+ * fill instead of white, dashed instead of solid border, no bevel, and the value
+ * one ink step down. Dashed is the one doing most of the work: "a setting that
+ * is stored but not in effect" is exactly what a dashed outline reads as, and it
+ * survives being looked at quickly in a way a fill change alone does not.
+ *
+ * Flattened, never faded. `opacity` was the obvious reach and is the wrong one -
+ * it would multiply with `[data-pending] .stat-list`'s 0.5 and land an in-flight
+ * off-device's readings near a quarter opacity, well under the contrast floor.
+ *
+ * The value stays at `--text-dim` (4.9:1 on this fill) and never goes to
+ * `--text-mute`, which this file reserves for decoration that carries no
+ * information. A device reading carries information even when the device is off,
+ * and FR-5.5 is about it being legible, not merely present. That floor is also
+ * why the fill is `--surface` and not `--surface-2`: the darker step puts
+ * `--text-dim` at 4.4:1, which fails.
+ *
+ * No `aria-disabled`: nothing here is interactive (FE-R-7), and the state is
+ * already stated in words by the power chip this rule deliberately leaves alone.
+ */
+.stat-chip[data-inactive='true'] {
+  background: var(--surface);
+  border-color: var(--line);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.stat-chip[data-inactive='true'] dd {
+  color: var(--text-dim);
 }
 
 .stat-unit {

@@ -25,9 +25,11 @@
  *      that data simply never arrives from BE. `./characters.ts` supplies the
  *      roster locally, and `state.ts` supplies a local cosmetic exp bump. See
  *      the note there.
- *   2. No standalone device-state route - `DeviceState` only ever appears
- *      inside a chat turn's `done` event (and never at all from `/invoke`).
- *      `getDeviceState` has nothing to fetch and resolves `null`.
+ *   2. `/invoke` returns no `deviceState` even when the skill it ran changed
+ *      one, so the panel waits for the next chat turn that reports on the
+ *      device. `GET /device-state` itself is real and is what `getDeviceState`
+ *      reads when the screen opens, so the panel is no longer empty until the
+ *      first chat turn.
  *   3. No `/api/transcribe` route yet. `transcribe` below is still wired to
  *      FE's original mock contract so it starts working the moment BE adds it,
  *      but it is unreachable today because the mic is forced to `unavailable`
@@ -285,8 +287,20 @@ function createHttpClient(getLang: GetLang): ApiClient {
       return structuredClone(CHARACTER_DEFAULTS);
     },
 
-    async getDeviceState() {
-      return null;
+    /**
+     * The device's own reading, fetched when the character screen opens.
+     *
+     * FR-5.5 is not loosened by this: `GET /device-state` returns the same
+     * structured `DeviceState` device-stub reports to the agent's tools, run
+     * through the same `toDeviceStats`. Nothing is invented here - a device
+     * nobody has commanded yet reports its resting values (power off), and
+     * those are what the panel shows instead of a permanent loading line.
+     */
+    async getDeviceState(characterId) {
+      const state = await unwrap<BeDeviceState>(
+        await fetch(`/api/characters/${characterId}/device-state`),
+      );
+      return toDeviceStats(state);
     },
 
     async getTodayContext() {

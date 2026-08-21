@@ -37,6 +37,23 @@ interface Props {
 }
 
 export function DeviceStatStrip({ deviceStats, pending, lang, t }: Props) {
+  /*
+   * With the power off, every other reading is a standing setting rather than
+   * something the device is doing right now, so the rest of the chips recede.
+   *
+   * Read off the same `power` attribute the panel renders - not a prop and not a
+   * second source. FE-R-1 would be weakened by a prop here, because that is a
+   * way for something other than the device's own reported state to decide how
+   * the device's state looks.
+   *
+   * Recessed, never hidden or blanked. The values are still what the device
+   * reports and FR-5.5 requires them to stay legible - `.stat-chip` keeps them
+   * above the AA contrast floor (see the styles), and `--text-mute` is
+   * deliberately not used for a value since this project reserves it for
+   * decoration that carries no information.
+   */
+  const powerOff = deviceStats?.attributes.some((a) => a.key === 'power' && a.value === false) ?? false;
+
   return (
     <section
       className="stat-panel"
@@ -63,15 +80,29 @@ export function DeviceStatStrip({ deviceStats, pending, lang, t }: Props) {
         <span className="stat-empty">{t('stat.none')}</span>
       ) : (
         <dl className="stat-list">
-          {deviceStats.attributes.map((attribute) => (
-            <div className="stat-chip" key={attribute.key} data-testid="stat-attribute">
-              <dt>{attributeLabel(attribute.key, lang)}</dt>
-              <dd className="tnum">
-                {attributeValue(attribute.value, lang)}
-                {attribute.unit ? <span className="stat-unit">{attribute.unit}</span> : null}
-              </dd>
-            </div>
-          ))}
+          {deviceStats.attributes.map((attribute) => {
+            const isPower = attribute.key === 'power';
+            return (
+              <div
+                className="stat-chip"
+                key={attribute.key}
+                data-testid="stat-attribute"
+                // Two attributes rather than one three-valued one, because they
+                // are two different statements: `data-power` is what the device
+                // reports, `data-inactive` is a consequence drawn for the chips
+                // around it. Collapsing them would make the power chip's own
+                // styling depend on a rule about other chips.
+                data-power={isPower ? (powerOff ? 'off' : 'on') : undefined}
+                data-inactive={!isPower && powerOff}
+              >
+                <dt>{attributeLabel(attribute.key, lang)}</dt>
+                <dd className="tnum">
+                  {attributeValue(attribute.value, lang)}
+                  {attribute.unit ? <span className="stat-unit">{attribute.unit}</span> : null}
+                </dd>
+              </div>
+            );
+          })}
         </dl>
       )}
     </section>
