@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import type { Lang } from '@prompthon/shared';
-import { createApiClient } from './api';
+import { createApiClient, type ContextScenario } from './api';
 import { isSendable, normalizeInput } from './pure';
 import { translator } from './strings';
 import {
@@ -132,6 +132,22 @@ export function App() {
   }, [api]);
 
   useEffect(loadContext, [loadContext]);
+
+  /**
+   * Demo lever - swaps today's whole reading to one of device-stub's
+   * presets. Same success/failure handling as `loadContext`: this is still a
+   * reading, not an action the character performs, so a failure updates the
+   * panel rather than becoming a chat line.
+   */
+  const setScenario = useCallback(
+    (scenario: ContextScenario) => {
+      api
+        .setContextScenario(scenario)
+        .then((context) => dispatch({ type: 'context/loaded', context }))
+        .catch(() => dispatch({ type: 'context/failed' }));
+    },
+    [api],
+  );
 
   const selectCharacter = (characterId: string) => {
     dispatch({ type: 'character/select', characterId });
@@ -282,6 +298,7 @@ export function App() {
           deviceStats={statsFor(state, character.id)}
           dailyContext={state.dailyContext}
           contextFailed={state.contextFailed}
+          onSetScenario={setScenario}
           messages={messagesFor(state, character.id)}
           skills={activeSkills(state, character.id)}
           unseen={state.unseen}

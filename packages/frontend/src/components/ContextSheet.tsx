@@ -13,12 +13,26 @@
  * leaves the character visible, `role="dialog"`, grip, title - so this is a
  * third instance of an existing pattern rather than a new kind of surface.
  *
- * FE-R-7 still holds: nothing in here is interactive. These are readings, and
- * there is nothing for the user to set. The only control is the close button.
+ * FE-R-7 still holds for the WIDGETS: nothing about the readings themselves is
+ * editable, and there is no control that sets device state. The scenario row
+ * below them is a deliberate, separate exception - not a reading, but a demo
+ * lever for picking which whole day-story device-stub is telling, so a
+ * rehearsal doesn't need direct backend access to change it. It lives here
+ * rather than in the HUD because the HUD's 3-column grid has no room for four
+ * more buttons without overflowing into the neighbouring cell (tried it -
+ * the compendium button ends up intercepting clicks meant for this row).
  */
 
 import type { DailyContextStats, Lang } from '@prompthon/shared';
+import type { ContextScenario } from '../api';
 import { contextWidgets, type ContextRing, type ContextWidget, type translator } from '../strings';
+
+const SCENARIO_BUTTONS: { scenario: ContextScenario; glyph: string }[] = [
+  { scenario: 'rain', glyph: '🌧️' },
+  { scenario: 'walk', glyph: '🚶' },
+  { scenario: 'screen', glyph: '📱' },
+  { scenario: 'clear', glyph: '☀️' },
+];
 
 /**
  * Ring geometry. `r` is inset from the 36-unit box by half the stroke so the
@@ -125,11 +139,13 @@ export function ContextSheet({
   lang,
   t,
   onClose,
+  onSetScenario,
 }: {
   context: DailyContextStats;
   lang: Lang;
   t: ReturnType<typeof translator>;
   onClose: () => void;
+  onSetScenario: (scenario: ContextScenario) => void;
 }) {
   return (
     <div className="sheet-layer" data-testid="context-sheet">
@@ -153,6 +169,24 @@ export function ContextSheet({
           <div className="context-widgets">
             {contextWidgets(context, lang).map((widget) => (
               <Widget key={widget.key} widget={widget} t={t} />
+            ))}
+          </div>
+
+          {/* See the class-level note: a deliberate exception to "nothing in
+              here is interactive" - not a reading, a lever for which whole
+              day-story device-stub tells. */}
+          <div className="context-scenario-row" data-testid="context-scenario-row">
+            {SCENARIO_BUTTONS.map(({ scenario, glyph }) => (
+              <button
+                key={scenario}
+                type="button"
+                className="hud-button hud-button-glyph"
+                onClick={() => onSetScenario(scenario)}
+                aria-label={t(`scenario.${scenario}`)}
+                data-testid={`context-scenario-${scenario}`}
+              >
+                <span aria-hidden="true">{glyph}</span>
+              </button>
             ))}
           </div>
         </div>
