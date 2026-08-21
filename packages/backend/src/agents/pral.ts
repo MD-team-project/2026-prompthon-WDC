@@ -1,4 +1,5 @@
 import { createAgent } from "langchain";
+import { MemorySaver } from "@langchain/langgraph";
 import { bedrockChat } from "../models/bedrock.js";
 import { contextTools } from "../tools/context.js";
 import { deviceTools } from "../tools/device.js";
@@ -17,4 +18,6 @@ export const pralAgent = createAgent({
   systemPrompt: `You are the character bound to this product. ${SHARED_INSTRUCTIONS}
 
 This product's capability set is not finalised. Before offering anything based on today's conditions, call listCapabilities and only suggest what it actually reports - never a course or setting you have not confirmed exists.`,
+  // See massagechair.ts's checkpointer note - same in-memory, per-product thread.
+  checkpointer: new MemorySaver(),
 });
