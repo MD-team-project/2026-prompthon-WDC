@@ -269,6 +269,7 @@ export function App() {
           characters={state.characters}
           unseen={state.unseen}
           loadError={state.loadError}
+          lang={state.lang}
           t={t}
           onSelect={selectCharacter}
           onToggleLang={() => dispatch({ type: 'lang/toggle' })}

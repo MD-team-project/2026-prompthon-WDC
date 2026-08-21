@@ -30,9 +30,7 @@ import { MarkdownText } from './MarkdownText';
 interface Props {
   messages: ChatMessage[];
   pending: boolean;
-  logOpen: boolean;
   t: ReturnType<typeof translator>;
-  onToggleLog: (open: boolean) => void;
 }
 
 /** The last thing the character said. Skips the user's own lines. */
@@ -44,7 +42,7 @@ function lastSpoken(messages: ChatMessage[]): ChatMessage | null {
   return null;
 }
 
-export function SpeechArea({ messages, pending, logOpen, t, onToggleLog }: Props) {
+export function SpeechArea({ messages, pending, t }: Props) {
   const latest = messages.at(-1) ?? null;
   const awaiting = latest && latest.role === 'user' ? latest : null;
   const spoken = lastSpoken(messages);
@@ -67,23 +65,8 @@ export function SpeechArea({ messages, pending, logOpen, t, onToggleLog }: Props
           data-testid={`speech-caption-${spoken.kind}`}
         >
           <MarkdownText text={spoken.text} />
-
-          {/* Always at least one message here - `spoken` comes from `messages`,
-              so this branch never renders while the list is empty. */}
-          <button
-            type="button"
-            className="speech-balloon-history"
-            onClick={() => onToggleLog(!logOpen)}
-            aria-label={t('character.log')}
-            data-testid="speech-log-toggle"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 7v5l3 3M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" />
-            </svg>
-            <span className="tnum">{messages.length}</span>
-          </button>
         </div>
-      ) : (
+      ) : awaiting ? null : (
         <p className="speech-caption speech-caption-idle" data-testid="speech-caption-idle">
           {t('speech.waiting')}
         </p>

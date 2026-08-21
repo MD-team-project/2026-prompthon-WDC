@@ -11,20 +11,22 @@
  * needed mid-demo without going back, moving it is a one-line change.
  */
 
-import type { Character } from '@prompthon/shared';
-import type { translator } from '../strings';
+import type { Character, Lang } from '@prompthon/shared';
+import { characterIdleArt } from '../characters';
+import { productLabel, type translator } from '../strings';
 import { progressRatio } from '../pure';
 
 interface Props {
   characters: Character[];
   unseen: Record<string, number>;
   loadError: boolean;
+  lang: Lang;
   t: ReturnType<typeof translator>;
   onSelect: (characterId: string) => void;
   onToggleLang: () => void;
 }
 
-export function RosterView({ characters, unseen, loadError, t, onSelect, onToggleLang }: Props) {
+export function RosterView({ characters, unseen, loadError, lang, t, onSelect, onToggleLang }: Props) {
   return (
     <div className="roster">
       <header className="roster-header">
@@ -54,6 +56,7 @@ export function RosterView({ characters, unseen, loadError, t, onSelect, onToggl
             key={character.id}
             character={character}
             unseenCount={unseen[character.id] ?? 0}
+            lang={lang}
             t={t}
             onSelect={() => onSelect(character.id)}
           />
@@ -66,11 +69,13 @@ export function RosterView({ characters, unseen, loadError, t, onSelect, onToggl
 function CharacterTile({
   character,
   unseenCount,
+  lang,
   t,
   onSelect,
 }: {
   character: Character;
   unseenCount: number;
+  lang: Lang;
   t: ReturnType<typeof translator>;
   onSelect: () => void;
 }) {
@@ -85,19 +90,21 @@ function CharacterTile({
         data-product={character.productId}
         onClick={onSelect}
         data-testid="roster-character-tile"
-        aria-label={`${character.name}, ${t('stat.level')} ${character.level}${
+        aria-label={`${character.name}, ${productLabel(character.productId, lang)}, ${t('stat.level')} ${character.level}${
           unseenCount > 0 ? `, ${t('roster.discovered')}` : ''
         }`}
       >
         <span className="tile-aura" aria-hidden="true" />
 
-        <span className="tile-art" data-level={character.level} aria-hidden="true">
-          <span className="tile-art-glyph" />
-          <span className="tile-art-ring" />
+        <span className="tile-art" aria-hidden="true">
+          <img className="tile-art-image" src={characterIdleArt(character.productId)} alt="" />
         </span>
 
         <span className="tile-body">
-          <span className="tile-name">{character.name}</span>
+          <span className="tile-heading">
+            <span className="tile-name">{character.name}</span>
+            <span className="tile-product">{productLabel(character.productId, lang)}</span>
+          </span>
           <span className="tile-meta">
             <span className="tile-level tnum">
               {t('stat.level')} {character.level}
