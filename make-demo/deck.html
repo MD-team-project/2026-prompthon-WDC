@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>발표 덱 (v0.1)</title>
+
+<!-- 폰트: packages/frontend/index.html 과 동일하게 로드한다.
+     Pretendard = 본문 / Instrument Sans = 라틴·숫자 / Galmuri11 = 캐릭터 말풍선 전용 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css" rel="stylesheet">
+
+<style>
+/* =============================================================
+   발표 덱 스타일 시스템
+
+   토큰과 형태는 메인 앱(packages/frontend/src/styles.css)에서 가져왔다.
+   device-demo / discovery-demo 의 테마가 아니라 메인 앱 테마 기준이다.
+
+   구조(1660x934 고정 캔버스 + fitStage 통째 스케일, 상/하단 고정 바,
+   fade 전환, TOC, 키보드 네비)는 html-presentation 스킬을 따른다.
+
+   >>> 이 <style> 블록은 수정하지 않는다. 내용은 아래 SLIDES 영역에만 쓴다.
+       사용 가능한 컴포넌트는 make-demo/COMPONENTS.md 참고.
+   ============================================================= */
+
+:root {
+  /* ---- surfaces: 흰 배경 + 웜 페이퍼 계단 ---- */
+  --bg:        #ffffff;
+  --surface:   #f6f4f0;
+  --surface-2: #ede9e2;
+  --line:      #e3e0db;
+  --line-2:    #edeae5;
+
+  /* ---- ink ---- */
+  --text:      #191816;
+  --text-dim:  #6e6b65;
+  --text-mute: #a9a59d;
+
+  /* ---- semantic ---- */
+  --danger:      #a8382f;
+  --danger-bg:   #f7e7e5;
+  --power-on:    #2f6a45;
+  --power-on-bg: #e6f0e8;
+
+  /* ---- game-HUD layer ----
+     메인 앱은 대각선 드롭섀도우가 아니라 아래쪽 립만 두는 "버튼 베벨"을 쓴다.
+     0 2px 0 / 0 3px 0 이 표준. 블러는 쓰지 않는다. */
+  --ink:       #2a2016;
+  --ink-soft:  rgba(42, 32, 22, 0.18);
+  --gold:      #f2b134;
+  --gold-deep: #c8811a;
+  --gold-ink:  #4a2f05;
+  --gold-grad: linear-gradient(180deg, var(--gold), var(--gold-deep));
+
+  /* ---- per-product accent (기본값 = shoecase) ---- */
+  --product:     #6e7ba8;
+  --product-ink: #4e5b85;
+  --tint:        #e8eaf2;
+
+  --radius:    14px;
+  --radius-lg: 20px;
+
+  --font-body: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+    'Apple SD Gothic Neo', 'Segoe UI', Roboto, sans-serif;
+  --font-latin: 'Instrument Sans', var(--font-body);
+  /* 캐릭터가 말하는 것에만. HUD 텍스트에는 절대 쓰지 않는다. */
+  --font-pixel: 'Galmuri11', var(--font-body);
+
+  /* 픽셀 프레임 기하 — 말풍선 전용 */
+  --pixel:    10px;
+  --pixel-b:  4px;
+  --pixel-in: calc(var(--pixel) - var(--pixel-b));
+  --notch-outer: polygon(
+    0 var(--pixel), var(--pixel) var(--pixel), var(--pixel) 0,
+    calc(100% - var(--pixel)) 0, calc(100% - var(--pixel)) var(--pixel), 100% var(--pixel),
+    100% calc(100% - var(--pixel)), calc(100% - var(--pixel)) calc(100% - var(--pixel)),
+    calc(100% - var(--pixel)) 100%, var(--pixel) 100%,
+    var(--pixel) calc(100% - var(--pixel)), 0 calc(100% - var(--pixel))
+  );
+  --notch-inner: polygon(
+    0 var(--pixel-in), var(--pixel-in) var(--pixel-in), var(--pixel-in) 0,
+    calc(100% - var(--pixel-in)) 0, calc(100% - var(--pixel-in)) var(--pixel-in), 100% var(--pixel-in),
+    100% calc(100% - var(--pixel-in)), calc(100% - var(--pixel-in)) calc(100% - var(--pixel-in)),
+    calc(100% - var(--pixel-in)) 100%, var(--pixel-in) 100%,
+    var(--pixel-in) calc(100% - var(--pixel-in)), 0 calc(100% - var(--pixel-in))
+  );
+
+  --canvas-w: 1660px;
+  --canvas-h: 934px;
+  --stage-scale: 1;
+}
+
+/* 메인 앱의 per-product 틴트 전환. 값은 styles.css 와 동일하게 유지한다. */
+[data-product='pral']         { --product: #a87c86; --product-ink: #7e5a63; --tint: #f3ebec; }
+[data-product='shoecase']     { --product: #6e7ba8; --product-ink: #4e5b85; --tint: #e8eaf2; }
+[data-product='massagechair'] { --product: #5a7a66; --product-ink: #3f5b4a; --tint: #e9efea; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font-body);
+  background: var(--surface-2);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+::selection { background: var(--gold); color: var(--gold-ink); }
+
+/* ===================== Progress / Topbar ===================== */
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 4px; width: 0%;
+  background: var(--gold-grad); border-bottom: 2px solid var(--ink);
+  z-index: 1000; transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 60px;
+  display: flex; align-items: center; justify-content: space-between; padding: 0 28px;
+  background: var(--bg); z-index: 100; border-bottom: 2px solid var(--ink);
+}
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand-mark {
+  font-family: var(--font-latin); font-weight: 700; font-size: 15px; letter-spacing: 0.02em;
+  color: var(--gold-ink); background: var(--gold-grad);
+  border: 2px solid var(--ink); border-radius: 999px;
+  box-shadow: 0 2px 0 var(--ink-soft); padding: 5px 13px;
+}
+.brand-text {
+  font-family: var(--font-latin); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.16em; color: var(--text-dim);
+}
+.brand-ver {
+  font-family: var(--font-latin); font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--gold-ink); background: var(--surface);
+  border: 2px solid var(--ink); border-radius: 6px; padding: 3px 8px;
+}
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.slide-counter {
+  font-family: var(--font-latin); font-size: 13px; font-weight: 600;
+  color: var(--text-dim); letter-spacing: 0.05em; font-variant-numeric: tabular-nums;
+}
+.slide-counter .current { color: var(--gold-ink); font-weight: 700; font-size: 16px; }
+.toc-btn {
+  background: var(--bg); border: 2px solid var(--ink); box-shadow: 0 2px 0 var(--ink-soft);
+  color: var(--text); padding: 6px 14px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+  transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+}
+.toc-btn:hover { background: var(--gold); transform: translateY(2px); box-shadow: 0 0 0 var(--ink-soft); }
+
+/* ===================== Stage ===================== */
+.stage {
+  position: fixed; top: 60px; left: 0; right: 0; bottom: 68px;
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+#stageScaler {
+  width: var(--canvas-w); height: var(--canvas-h);
+  transform-origin: center center; transform: scale(var(--stage-scale));
+  position: relative;
+}
+.slide {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; visibility: hidden; transform: translateY(20px);
+  transition: opacity 0.45s cubic-bezier(0.4,0,0.2,1), transform 0.45s cubic-bezier(0.4,0,0.2,1), visibility 0.45s;
+  overflow: hidden; background: var(--bg);
+}
+.slide.active { opacity: 1; pointer-events: auto; visibility: visible; transform: translateY(0); }
+.slide-inner {
+  width: 1660px; height: 934px; padding: 52px 60px; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.slide-cover .slide-inner, .slide-closing .slide-inner { align-items: center; text-align: center; }
+
+/* ===================== 헤더 / 타이포 ===================== */
+.section-header { margin-bottom: 30px; }
+.section-label {
+  display: inline-block; font-family: var(--font-latin);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
+  color: var(--gold-ink); background: var(--gold-grad);
+  border: 2px solid var(--ink); border-radius: 999px;
+  box-shadow: 0 2px 0 var(--ink-soft); padding: 5px 13px; margin-bottom: 16px;
+}
+.section-title { font-size: 44px; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; }
+.section-title-bar {
+  width: 56px; height: 6px; background: var(--product);
+  border: 2px solid var(--ink); border-radius: 999px; margin-top: 16px;
+}
+.lead { font-size: 18px; color: var(--text-dim); line-height: 1.75; }
+
+.cover-pretitle { font-size: 20px; font-weight: 600; line-height: 1.5; color: var(--text-dim); margin-bottom: 20px; }
+.cover-title { font-size: 88px; font-weight: 800; line-height: 1.06; letter-spacing: -0.035em; margin-bottom: 24px; }
+.cover-title .accent { color: var(--product-ink); }
+.cover-date {
+  font-family: var(--font-latin); font-size: 14px; font-weight: 600;
+  color: var(--text-dim); letter-spacing: 0.12em;
+}
+.gold-rule { width: 56px; height: 6px; background: var(--gold-grad); border: 2px solid var(--ink); border-radius: 999px; }
+
+/* ===================== 카드 / 칩 ===================== */
+.card {
+  background: var(--bg); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: 0 3px 0 var(--ink); padding: 24px;
+}
+.card.paper  { background: var(--surface); }
+.card.tinted { background: var(--tint); }
+.card.gold   { background: var(--gold-grad); color: var(--gold-ink); }
+.card-title { font-size: 19px; font-weight: 800; line-height: 1.32; margin-bottom: 8px; }
+.card-body  { font-size: 14.5px; color: var(--text-dim); line-height: 1.6; }
+.card.gold .card-body { color: var(--gold-ink); opacity: 0.85; }
+
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+.row    { display: flex; gap: 18px; align-items: stretch; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 700; padding: 7px 14px; border-radius: 999px;
+  border: 2px solid var(--ink); box-shadow: 0 2px 0 var(--ink-soft); background: var(--bg);
+}
+.chip.gold  { background: var(--gold-grad); color: var(--gold-ink); }
+.chip.tint  { background: var(--tint); color: var(--product-ink); }
+.chip.on    { background: var(--power-on-bg); color: var(--power-on); }
+.chip.risk  { background: var(--danger-bg); color: var(--danger); }
+.chip .swatch { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); }
+.chip-lat { font-family: var(--font-latin); letter-spacing: 0.06em; font-size: 12px; }
+
+/* ===================== 서술형 문단 / 어젠다 선언 ===================== */
+.body-text { font-size: 20px; line-height: 1.85; margin-bottom: 16px; max-width: 1320px; }
+.body-text .dim { color: var(--text-dim); }
+.turn {
+  margin-top: 26px; padding: 26px 30px; background: var(--surface);
+  border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: 0 3px 0 var(--ink);
+}
+.turn-line { display: block; font-size: 20px; line-height: 1.75; }
+.turn-line + .turn-line { margin-top: 12px; }
+.turn-no {
+  display: inline-block; font-family: var(--font-latin); font-weight: 700; font-size: 13px;
+  color: var(--gold-ink); background: var(--gold-grad); border: 2px solid var(--ink);
+  border-radius: 999px; box-shadow: 0 2px 0 var(--ink-soft); padding: 2px 10px; margin-right: 12px;
+}
+.hl { font-weight: 800; color: var(--product-ink); background: var(--tint); border-radius: 6px; padding: 1px 7px; }
+
+/* ===================== 캐릭터 스테이지 (에셋 있을 때만) ===================== */
+.fe-stage {
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-lg);
+  box-shadow: 0 3px 0 var(--ink); display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative;
+}
+.fe-stage img { width: 100%; height: 100%; object-fit: contain; }
+
+/* 캐릭터 말풍선 — 픽셀 프레임. 메인 앱과 동일하게 *캐릭터의 말*에만 쓴다.
+   잉크 링(부모) + 서피스 채움(자식) 2겹. 라운드 코너와 드롭섀도우를 쓰지 않는
+   것이 "게임 대화창"으로 읽히게 하는 핵심이다. */
+.balloon { position: relative; background: var(--ink); clip-path: var(--notch-outer); display: inline-block; }
+.balloon > .balloon-in {
+  background: var(--surface); clip-path: var(--notch-inner);
+  margin: var(--pixel-b); padding: 14px 20px;
+  font-family: var(--font-pixel); font-size: 19px; line-height: 1.65; color: var(--text);
+}
+
+/* ===================== 스탯 스트립 ===================== */
+.stat-strip { display: flex; gap: 12px; }
+.stat {
+  flex: 1; background: var(--bg); border: 2px solid var(--ink); border-radius: 12px;
+  box-shadow: 0 3px 0 var(--ink); padding: 12px 14px;
+}
+.stat .k { font-family: var(--font-latin); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--text-mute); }
+.stat .v {
+  font-family: var(--font-latin); font-size: 24px; font-weight: 700;
+  margin-top: 3px; font-variant-numeric: tabular-nums; color: var(--product-ink);
+}
+
+/* ===================== 단계 플로우 ===================== */
+.flow { display: flex; align-items: stretch; }
+.flow-step {
+  flex: 1; background: var(--bg); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: 0 3px 0 var(--ink); padding: 26px 24px;
+}
+.flow-step.hi { background: var(--gold-grad); }
+.flow-step .st-label { font-family: var(--font-latin); font-size: 11px; font-weight: 700; letter-spacing: 0.16em; color: var(--text-mute); margin-bottom: 12px; }
+.flow-step.hi .st-label { color: var(--gold-ink); opacity: 0.75; }
+.flow-step .st-title { font-size: 22px; font-weight: 800; line-height: 1.32; margin-bottom: 10px; }
+.flow-step.hi .st-title { color: var(--gold-ink); }
+.flow-step .st-body { font-size: 14.5px; color: var(--text-dim); line-height: 1.6; }
+.flow-step.hi .st-body { color: var(--gold-ink); opacity: 0.85; }
+.flow-arrow { display: flex; align-items: center; justify-content: center; width: 58px; color: var(--ink); font-size: 30px; font-weight: 800; }
+
+/* ===================== 좌우 대조 ===================== */
+.vs { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+.vs-col { border-radius: var(--radius); padding: 24px 26px; border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
+.vs-col.left  { background: var(--surface); }
+.vs-col.right { background: var(--gold-grad); }
+.vs-col h4 { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; margin-bottom: 16px; }
+.vs-col.left h4  { color: var(--text-mute); }
+.vs-col.right h4 { color: var(--gold-ink); opacity: 0.75; }
+.vs-row { font-size: 16px; line-height: 1.6; padding: 10px 0; border-top: 2px solid var(--ink-soft); color: var(--text-dim); }
+.vs-col.right .vs-row { color: var(--gold-ink); border-top-color: rgba(74,47,5,0.22); }
+.vs-row:first-of-type { border-top: none; }
+.vs-row b { font-weight: 800; }
+
+.hero-line { font-size: 32px; font-weight: 800; line-height: 1.38; letter-spacing: -0.015em; margin-bottom: 24px; }
+.hero-line em { font-style: normal; color: var(--product-ink); background: var(--tint); border-radius: 8px; padding: 2px 10px; }
+
+.note-gold {
+  margin-top: 22px; padding: 18px 22px; border-radius: var(--radius);
+  background: var(--gold-grad); border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+  font-size: 16px; line-height: 1.6; color: var(--gold-ink); font-weight: 600;
+}
+.note-mute { margin-top: 14px; font-size: 14.5px; color: var(--text-mute); line-height: 1.6; }
+
+/* ===================== 아키텍처 도식 ===================== */
+.arch { display: flex; align-items: center; gap: 12px; }
+.arch-node {
+  background: var(--bg); border: 2px solid var(--ink); border-radius: 12px;
+  box-shadow: 0 3px 0 var(--ink); padding: 15px 17px; text-align: center; min-width: 152px;
+}
+.arch-node.gold { background: var(--gold-grad); }
+.arch-node.tint { background: var(--tint); }
+.arch-node .an-k { font-family: var(--font-latin); font-size: 10px; font-weight: 700; letter-spacing: 0.13em; color: var(--text-mute); margin-bottom: 5px; }
+.arch-node.gold .an-k { color: var(--gold-ink); opacity: 0.7; }
+.arch-node .an-t { font-size: 15px; font-weight: 700; line-height: 1.3; }
+.arch-node.gold .an-t { color: var(--gold-ink); }
+.arch-arrow { color: var(--ink); font-size: 22px; font-weight: 800; }
+.arch-split { border-top: 3px dashed var(--ink); margin: 24px 0 10px; position: relative; }
+.arch-split span {
+  position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  background: var(--gold-grad); color: var(--gold-ink);
+  border: 2px solid var(--ink); border-radius: 999px; box-shadow: 0 2px 0 var(--ink-soft);
+  padding: 3px 14px; font-family: var(--font-latin); font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+}
+
+/* ===================== 근거 칩 (출처 표기용) ===================== */
+.chips-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.chip-lg {
+  font-size: 14px; line-height: 1.5; padding: 13px 16px; border-radius: 12px;
+  background: var(--bg); border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+  color: var(--text-dim); flex: 1 1 300px;
+}
+.chip-lg b { color: var(--text); font-weight: 800; }
+.chip-lg.gold { background: var(--gold-grad); color: var(--gold-ink); }
+.chip-lg.gold b { color: var(--gold-ink); }
+.chip-lg .src { display: block; margin-top: 6px; font-family: var(--font-latin); font-size: 10.5px; color: var(--text-mute); letter-spacing: 0.04em; }
+.chip-lg.gold .src { color: var(--gold-ink); opacity: 0.7; }
+
+/* ===================== step 카드 ===================== */
+.step {
+  background: var(--bg); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: 0 3px 0 var(--ink); padding: 20px 22px;
+}
+.step + .step { margin-top: 16px; }
+.step-no {
+  display: inline-block; font-family: var(--font-latin); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.1em; color: var(--gold-ink); background: var(--gold-grad);
+  border: 2px solid var(--ink); border-radius: 999px; box-shadow: 0 2px 0 var(--ink-soft);
+  padding: 2px 10px; margin-bottom: 10px;
+}
+.step-title { font-size: 19px; font-weight: 800; line-height: 1.32; margin-bottom: 6px; }
+.step-body { font-size: 14.5px; color: var(--text-dim); line-height: 1.6; }
+
+/* ===================== Controls ===================== */
+.controls {
+  position: fixed; bottom: 0; left: 0; right: 0; height: 68px;
+  display: flex; align-items: center; justify-content: center; gap: 22px;
+  background: var(--bg); z-index: 100; border-top: 2px solid var(--ink);
+}
+.nav-btn {
+  width: 44px; height: 44px; border-radius: 50%; background: var(--bg);
+  border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink-soft);
+  color: var(--ink); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+}
+.nav-btn:hover { background: var(--gold); transform: translateY(3px); box-shadow: 0 0 0 var(--ink-soft); }
+.nav-btn:disabled { opacity: 0.32; cursor: not-allowed; transform: none; box-shadow: 0 3px 0 var(--ink-soft); background: var(--bg); }
+.nav-btn svg { width: 19px; height: 19px; }
+.dots { display: flex; gap: 8px; align-items: center; }
+.dot { width: 11px; height: 11px; border-radius: 50%; background: var(--bg); border: 2px solid var(--ink); cursor: pointer; transition: all 0.2s; }
+.dot.active { background: var(--gold-grad); width: 30px; border-radius: 999px; box-shadow: 0 2px 0 var(--ink-soft); }
+.dot.section-end { margin-right: 14px; }
+.dot:hover { background: var(--tint); }
+.key-hint { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--text-mute); }
+.key-hint kbd { background: var(--surface); border: 2px solid var(--ink); border-radius: 5px; padding: 1px 6px; font-family: var(--font-latin); font-weight: 600; color: var(--text); }
+
+/* ===================== TOC ===================== */
+.toc-backdrop { position: fixed; inset: 0; background: rgba(42,32,22,0.42); z-index: 150; opacity: 0; pointer-events: none; transition: opacity 0.28s; }
+.toc-backdrop.open { opacity: 1; pointer-events: auto; }
+.toc-panel {
+  position: fixed; top: 0; right: 0; width: 388px; height: 100%;
+  background: var(--surface); border-left: 2px solid var(--ink); z-index: 200;
+  transform: translateX(100%); transition: transform 0.36s cubic-bezier(0.4,0,0.2,1);
+  overflow-y: auto; padding: 78px 28px 40px;
+}
+.toc-panel.open { transform: translateX(0); }
+.toc-close {
+  position: absolute; top: 24px; right: 24px; width: 34px; height: 34px;
+  background: var(--bg); border: 2px solid var(--ink); box-shadow: 0 2px 0 var(--ink-soft);
+  border-radius: 8px; color: var(--text); font-size: 15px; cursor: pointer; font-family: inherit;
+}
+.toc-close:hover { background: var(--gold); }
+.toc-section-title {
+  display: inline-block; font-family: var(--font-latin); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.16em; color: var(--gold-ink); background: var(--gold-grad);
+  border: 2px solid var(--ink); border-radius: 999px; padding: 3px 11px;
+  text-transform: uppercase; margin: 22px 0 12px;
+}
+.toc-item {
+  display: flex; align-items: center; gap: 13px; padding: 11px 14px; margin-bottom: 8px;
+  border: 2px solid var(--ink); border-radius: 10px; background: var(--bg);
+  box-shadow: 0 2px 0 var(--ink-soft); cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+}
+.toc-item:hover { background: var(--tint); transform: translateY(2px); box-shadow: 0 0 0 var(--ink-soft); }
+.toc-item.active { background: var(--gold-grad); }
+.toc-num { font-family: var(--font-latin); font-size: 12px; font-weight: 700; color: var(--text-mute); min-width: 22px; font-variant-numeric: tabular-nums; }
+.toc-item.active .toc-num { color: var(--gold-ink); opacity: 0.7; }
+.toc-label { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.toc-item.active .toc-label { color: var(--gold-ink); }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- BRAND: 팀명/태그라인/버전. 버전은 <title> 과 파일명까지 3곳 동기화. -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">TEAM</div>
+    <div class="brand-text">SUBTITLE</div>
+    <div class="brand-ver">v0.1</div>
+  </div>
+  <div class="topbar-right">
+    <div class="slide-counter"><span class="current" id="currentSlide">01</span> / <span id="totalSlides">00</span></div>
+    <button class="toc-btn" onclick="toggleTOC()">목차</button>
+  </div>
+</div>
+
+<div class="stage">
+ <div id="stageScaler">
+
+  <!-- ==========================================================
+       SLIDES — 여기서부터 아래 </div> 까지가 편집 영역이다.
+       컴포넌트 마크업은 make-demo/COMPONENTS.md 에서 복사한다.
+       슬라이드를 추가/삭제하면 아래 TOC 의 data-slide 인덱스와
+       sectionEnds 배열을 반드시 함께 고친다 (0-based).
+       ========================================================== -->
+
+  <!-- ---- 0 : 표지 ---- -->
+  <section class="slide slide-cover active" data-section="opening" data-product="shoecase">
+    <div class="slide-inner">
+      <div class="cover-pretitle">한 줄 부제</div>
+      <div class="cover-title">제목<br><span class="accent">Title</span></div>
+      <div class="gold-rule" style="margin:0 auto 24px;"></div>
+      <div class="cover-date">날짜 · 행사명 · 팀명</div>
+    </div>
+  </section>
+
+  <!-- ---- 1 : 본문 (빈 슬라이드) ---- -->
+  <section class="slide" data-section="contents" data-product="shoecase">
+    <div class="slide-inner">
+      <div class="section-header">
+        <div class="section-label">SECTION 01</div>
+        <div class="section-title">슬라이드 제목</div>
+        <div class="section-title-bar"></div>
+      </div>
+      <p class="lead">여기에 내용을 넣습니다. 컴포넌트는 COMPONENTS.md 에서 가져오세요.</p>
+    </div>
+  </section>
+
+  <!-- ---- 2 : 마무리 ---- -->
+  <section class="slide slide-closing" data-section="closing" data-product="shoecase">
+    <div class="slide-inner">
+      <h2 style="font-size:46px; font-weight:800; line-height:1.32; letter-spacing:-0.02em; margin-bottom:24px;">마무리 한 줄</h2>
+      <div class="gold-rule" style="margin:0 auto 24px;"></div>
+      <p class="lead">팀명</p>
+    </div>
+  </section>
+
+  <!-- ========================= /SLIDES ========================= -->
+
+ </div>
+</div>
+
+<div class="controls">
+  <button class="nav-btn" id="prevBtn" onclick="goPrev()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+  <div class="dots" id="dots"></div>
+  <button class="nav-btn" id="nextBtn" onclick="goNext()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+  </button>
+  <div class="key-hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> 이동 · <kbd>F</kbd> 전체화면</div>
+</div>
+
+<div class="toc-backdrop" id="tocBackdrop" onclick="toggleTOC()"></div>
+<div class="toc-panel" id="tocPanel">
+  <button class="toc-close" onclick="toggleTOC()">&#10005;</button>
+  <!-- TOC: 슬라이드와 1:1. data-slide 는 0-based 인덱스. -->
+  <div class="toc-section-title">Opening</div>
+  <div class="toc-item" data-slide="0"><div class="toc-num">01</div><div class="toc-label">표지</div></div>
+  <div class="toc-section-title">Contents</div>
+  <div class="toc-item" data-slide="1"><div class="toc-num">02</div><div class="toc-label">슬라이드 제목</div></div>
+  <div class="toc-section-title">Closing</div>
+  <div class="toc-item" data-slide="2"><div class="toc-num">03</div><div class="toc-label">마무리</div></div>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const totalSlides = slides.length;
+  let currentIdx = 0;
+
+  // 도트에 시각적 그룹 구분을 넣을 인덱스(섹션 경계). 슬라이드 수가 바뀌면 함께 고친다.
+  const sectionEnds = [0, 1];
+
+  const dotsContainer = document.getElementById('dots');
+  for (let i = 0; i < totalSlides; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    if (sectionEnds.includes(i)) dot.classList.add('section-end');
+    dot.onclick = () => goTo(i);
+    dotsContainer.appendChild(dot);
+  }
+  const dots = document.querySelectorAll('.dot');
+  document.getElementById('totalSlides').textContent = String(totalSlides).padStart(2, '0');
+
+  /* 활성 슬라이드의 data-product 를 :root 로 올려, 상하단 바와 TOC 틴트까지
+     현재 제품 색을 따라가게 한다 (메인 앱의 per-product 전환과 같은 방식). */
+  function syncProduct() {
+    const p = slides[currentIdx].dataset.product;
+    if (p) document.documentElement.setAttribute('data-product', p);
+  }
+
+  function updateUI() {
+    slides.forEach((s, i) => s.classList.toggle('active', i === currentIdx));
+    dots.forEach((d, i) => d.classList.toggle('active', i === currentIdx));
+    document.querySelectorAll('.toc-item').forEach((it, i) => it.classList.toggle('active', i === currentIdx));
+    document.getElementById('currentSlide').textContent = String(currentIdx + 1).padStart(2, '0');
+    document.getElementById('progressBar').style.width = ((currentIdx + 1) / totalSlides * 100) + '%';
+    document.getElementById('prevBtn').disabled = currentIdx === 0;
+    document.getElementById('nextBtn').disabled = currentIdx === totalSlides - 1;
+    syncProduct();
+  }
+  function goTo(idx) { if (idx < 0 || idx >= totalSlides) return; currentIdx = idx; updateUI(); }
+  function goPrev() { goTo(currentIdx - 1); }
+  function goNext() { goTo(currentIdx + 1); }
+  function toggleTOC() {
+    document.getElementById('tocPanel').classList.toggle('open');
+    document.getElementById('tocBackdrop').classList.toggle('open');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); goNext(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goPrev(); }
+    else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    else if (e.key === 'End') { e.preventDefault(); goTo(totalSlides - 1); }
+    else if (e.key === 'f' || e.key === 'F') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    } else if (e.key === 'Escape') {
+      const panel = document.getElementById('tocPanel');
+      if (panel.classList.contains('open')) toggleTOC();
+    }
+  });
+
+  document.querySelectorAll('.toc-item').forEach(item => {
+    item.addEventListener('click', () => { goTo(parseInt(item.dataset.slide)); toggleTOC(); });
+  });
+
+  const CANVAS_W = 1660, CANVAS_H = 934;
+  function fitStage() {
+    const stage = document.querySelector('.stage');
+    if (!stage) return;
+    const scale = Math.min(stage.clientWidth / CANVAS_W, stage.clientHeight / CANVAS_H);
+    document.documentElement.style.setProperty('--stage-scale', scale);
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('load', fitStage);
+  fitStage();
+  updateUI();
+</script>
+
+</body>
+</html>
