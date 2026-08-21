@@ -51,7 +51,7 @@ import type {
 // `neighbourId` is gone with swipe navigation - switching is switcher-only now.
 import { progressRatio } from '../pure';
 import type { MicStatus } from '../state';
-import { weatherGlyph, type translator } from '../strings';
+import { productLabel, weatherGlyph, type translator } from '../strings';
 import { CharacterStage } from './CharacterStage';
 import { CharacterSwitcher } from './CharacterSwitcher';
 import { ContextSheet } from './ContextSheet';
@@ -211,7 +211,10 @@ export function CharacterView(props: Props) {
         </div>
 
         <div className="hud-id">
-          <span className="hud-name">{character.name}</span>
+          <span className="hud-heading">
+            <span className="hud-name">{character.name}</span>
+            <span className="hud-product">{productLabel(character.productId, props.lang)}</span>
+          </span>
           {/* Level and exp as one pill: the two numbers that make up progression,
               grouped together and apart from device state (FE-R-2). Exp is a
               bar rather than a second number - the level text already carries
@@ -281,14 +284,26 @@ export function CharacterView(props: Props) {
             t={t}
           />
 
-          <SpeechArea
-            messages={props.messages}
-            pending={props.pending}
-            logOpen={props.logOpen}
-            t={t}
-            onToggleLog={props.onToggleLog}
-          />
+          <SpeechArea messages={props.messages} pending={props.pending} t={t} />
         </div>
+
+        {/* Fixed to the stage's own bottom-right corner rather than the
+            balloon's - a stable spot the caption's own state (idle text,
+            balloon, or nothing while a reply is pending) never moves. */}
+        {props.messages.length > 0 ? (
+          <button
+            type="button"
+            className="chat-log-button"
+            onClick={() => props.onToggleLog(!props.logOpen)}
+            aria-label={t('character.log')}
+            data-testid="speech-log-toggle"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 7v5l3 3M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" />
+            </svg>
+            <span className="tnum">{props.messages.length}</span>
+          </button>
+        ) : null}
       </div>
 
       {props.characters.length > 1 ? (

@@ -11,7 +11,7 @@
  * unfilled and hiding the toggle - no other code changes.
  */
 
-import type { DailyContextStats, Lang, WeatherCondition } from "@prompthon/shared";
+import type { DailyContextStats, Lang, ProductId, WeatherCondition } from "@prompthon/shared";
 import {
   groupThousands,
   resolveLabel,
@@ -22,10 +22,13 @@ import {
 } from "./pure";
 
 const ko = {
-  "app.title": "Thin뀨~",
+  "app.title": "Thin뀨",
   "roster.subtitle": "제품마다 하나의 캐릭터가 있습니다",
   "roster.enter": "들어가기",
   "roster.discovered": "새로 발견",
+  "product.pral": "프라엘 마스크",
+  "product.shoecase": "슈케이스",
+  "product.massagechair": "안마의자",
   "character.back": "뒤로",
   "character.skills": "⚡️ 스킬 도감",
   "character.log": "대화 기록",
@@ -86,10 +89,13 @@ const ko = {
 type StringKey = keyof typeof ko;
 
 const en: Record<StringKey, string> = {
-  "app.title": "ThinQ Companion",
+  "app.title": "Thin뀨",
   "roster.subtitle": "One character per product",
   "roster.enter": "Enter",
   "roster.discovered": "New discovery",
+  "product.pral": "Pra.L Mask",
+  "product.shoecase": "Shoecase",
+  "product.massagechair": "Massage Chair",
   "character.back": "Back",
   "character.skills": "⚡️ Skill compendium",
   "character.log": "Conversation",
@@ -196,6 +202,11 @@ const attributeValues: Record<Lang, Record<string, string>> = {
     massage: "Massage",
   },
 };
+
+/** The device type shown alongside a character's name - never the character's own name. */
+export function productLabel(productId: ProductId, lang: Lang): string {
+  return strings[lang][`product.${productId}`];
+}
 
 export function attributeLabel(key: string, lang: Lang): string {
   return resolveLabel(key, attributeLabels[lang]);
