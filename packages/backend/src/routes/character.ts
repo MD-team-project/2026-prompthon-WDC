@@ -70,7 +70,14 @@ export function characterRouter(productId: ProductId, agent: Agent): Router {
     let deviceState: DeviceState | undefined;
 
     try {
-      const stream = agent.streamEvents({ messages: [new HumanMessage(humanText)] });
+      // `thread_id` is the fixed productId, not a per-request id - the
+      // checkpointer (agents/*.ts) is what turns this into cross-turn memory,
+      // and S6/FR-5.4's 1:1:1 binding means there is only ever one
+      // conversation per product to thread together.
+      const stream = agent.streamEvents(
+        { messages: [new HumanMessage(humanText)] },
+        { configurable: { thread_id: productId } },
+      );
 
       for await (const ev of stream) {
         if (ev.event === "on_chat_model_stream" && ev.name === "ChatBedrockConverse") {
@@ -140,7 +147,10 @@ export function characterRouter(productId: ProductId, agent: Agent): Router {
 
     try {
       const instruction = `Follow this skill you previously discovered, and carry it out now:\n\n${skill.content}`;
-      const result = await agent.invoke({ messages: [new HumanMessage(instruction)] });
+      const result = await agent.invoke(
+        { messages: [new HumanMessage(instruction)] },
+        { configurable: { thread_id: productId } },
+      );
       const last = result.messages[result.messages.length - 1];
 
       // Same FR-5.5 rule as /chat: forward the last tool-reported device

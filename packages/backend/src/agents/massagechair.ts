@@ -1,4 +1,5 @@
 import { createAgent } from "langchain";
+import { MemorySaver } from "@langchain/langgraph";
 import { bedrockChat } from "../models/bedrock.js";
 import { contextTools } from "../tools/context.js";
 import { massagechairTools } from "../tools/massagechair.js";
@@ -37,4 +38,10 @@ export const massagechairAgent = createAgent({
   systemPrompt: `You are the character bound to this massage chair. ${SHARED_INSTRUCTIONS}
 
 ${COURSES}`,
+  // In-memory conversation history, keyed by thread_id (routes/character.ts
+  // passes the fixed productId - S6/FR-5.4's 1:1:1 binding means there is
+  // only ever one conversation per product, never a per-user thread to pick
+  // between). ponytail: cleared on process restart, same deferral as
+  // data/usage.ts and data/skills.ts before their real stores existed.
+  checkpointer: new MemorySaver(),
 });

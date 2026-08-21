@@ -1,4 +1,5 @@
 import { createAgent } from "langchain";
+import { MemorySaver } from "@langchain/langgraph";
 import { bedrockChat } from "../models/bedrock.js";
 import { contextTools } from "../tools/context.js";
 import { shoecaseTools } from "../tools/shoecase.js";
@@ -33,4 +34,6 @@ export const shoecaseAgent = createAgent({
   systemPrompt: `You are the character bound to this shoe care case. ${SHARED_INSTRUCTIONS}
 
 ${COURSES}`,
+  // See massagechair.ts's checkpointer note - same in-memory, per-product thread.
+  checkpointer: new MemorySaver(),
 });
